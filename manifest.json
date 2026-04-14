@@ -1,0 +1,9 @@
+{
+	"id": "geocode-note",
+	"name": "Geocode Note",
+	"version": "1.0.0",
+	"minAppVersion": "0.15.0",
+	"description": "Add geographic coordinates, icon and color to your notes via geolocation or address lookup.",
+	"author": "Benoit Lamouche",
+	"isDesktopOnly": false
+}

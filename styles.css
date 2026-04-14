@@ -1,0 +1,336 @@
+/* =============================================
+   Geocode Note Plugin — Modal Styles
+   Mobile-first, responsive design
+   ============================================= */
+
+.geocode-modal {
+	padding: 0;
+	max-height: 80vh;
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+}
+
+.geocode-modal-title {
+	margin: 0 0 16px 0;
+	font-size: 1.3em;
+	font-weight: 600;
+}
+
+/* Sections */
+.geocode-section {
+	margin-bottom: 20px;
+	padding-bottom: 16px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.geocode-section:last-of-type {
+	border-bottom: none;
+}
+
+.geocode-section h3 {
+	margin: 0 0 10px 0;
+	font-size: 0.95em;
+	font-weight: 600;
+	color: var(--text-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+/* Coordinate display */
+.geocode-coord-display {
+	padding: 10px 14px;
+	border-radius: 8px;
+	background: var(--background-secondary);
+	font-family: var(--font-monospace);
+	font-size: 0.95em;
+	margin-bottom: 12px;
+	text-align: center;
+	min-height: 20px;
+}
+
+.geocode-coord-empty {
+	color: var(--text-faint);
+	font-family: var(--font-default);
+	font-style: italic;
+}
+
+/* Buttons */
+.geocode-btn {
+	cursor: pointer;
+	border: none;
+	border-radius: 8px;
+	padding: 10px 16px;
+	font-size: 0.95em;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	transition: background 0.15s, opacity 0.15s;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.geocode-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.geocode-btn-primary {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	width: 100%;
+	font-weight: 500;
+}
+
+.geocode-btn-primary:hover:not(:disabled) {
+	background: var(--interactive-accent-hover);
+}
+
+.geocode-btn-secondary {
+	background: var(--interactive-normal);
+	color: var(--text-normal);
+	padding: 10px 14px;
+	flex-shrink: 0;
+}
+
+.geocode-btn-secondary:hover:not(:disabled) {
+	background: var(--interactive-hover);
+}
+
+.geocode-btn-link {
+	background: none;
+	color: var(--text-accent);
+	padding: 6px 0;
+	font-size: 0.85em;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+
+.geocode-btn-link:hover {
+	color: var(--text-accent-hover);
+}
+
+.geocode-btn-icon {
+	display: inline-flex;
+	align-items: center;
+}
+
+.geocode-btn-icon svg {
+	width: 16px;
+	height: 16px;
+}
+
+.geocode-btn-submit {
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	width: 100%;
+	padding: 14px 20px;
+	font-size: 1.05em;
+	font-weight: 600;
+	border-radius: 10px;
+	margin-top: 4px;
+}
+
+.geocode-btn-submit:hover:not(:disabled) {
+	background: var(--interactive-accent-hover);
+}
+
+/* Address search */
+.geocode-address-wrapper {
+	display: flex;
+	gap: 8px;
+	margin: 12px 0;
+}
+
+.geocode-address-input {
+	flex: 1;
+	padding: 10px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 0.95em;
+	min-width: 0;
+}
+
+.geocode-address-input:focus {
+	border-color: var(--interactive-accent);
+	outline: none;
+	box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.geocode-address-input::placeholder {
+	color: var(--text-faint);
+}
+
+/* Manual fields */
+.geocode-manual-wrapper {
+	margin-top: 4px;
+}
+
+.geocode-manual-fields {
+	display: flex;
+	gap: 12px;
+	margin-top: 8px;
+}
+
+.geocode-field {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.geocode-field label {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	font-weight: 500;
+}
+
+.geocode-input {
+	padding: 8px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: 8px;
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font-size: 0.95em;
+	font-family: var(--font-monospace);
+}
+
+.geocode-input:focus {
+	border-color: var(--interactive-accent);
+	outline: none;
+	box-shadow: 0 0 0 2px var(--interactive-accent-hover);
+}
+
+.geocode-hidden {
+	display: none !important;
+}
+
+/* Icon grid */
+.geocode-icon-container {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.geocode-icon-category-label {
+	font-size: 0.8em;
+	color: var(--text-faint);
+	font-weight: 500;
+	margin-bottom: 4px;
+	display: block;
+}
+
+.geocode-icon-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.geocode-icon-btn {
+	width: 40px;
+	height: 40px;
+	border-radius: 8px;
+	border: 2px solid transparent;
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	transition: border-color 0.15s, background 0.15s, transform 0.1s;
+	-webkit-tap-highlight-color: transparent;
+}
+
+.geocode-icon-btn svg {
+	width: 20px;
+	height: 20px;
+}
+
+.geocode-icon-btn:hover {
+	background: var(--background-modifier-hover);
+	transform: scale(1.05);
+}
+
+.geocode-icon-btn.geocode-selected {
+	border-color: var(--interactive-accent);
+	background: var(--background-primary-alt);
+}
+
+/* Color grid */
+.geocode-color-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.geocode-color-btn {
+	width: 36px;
+	height: 36px;
+	border-radius: 50%;
+	border: 3px solid transparent;
+	cursor: pointer;
+	transition: transform 0.1s, border-color 0.15s, box-shadow 0.15s;
+	-webkit-tap-highlight-color: transparent;
+	padding: 0;
+}
+
+.geocode-color-btn:hover {
+	transform: scale(1.15);
+}
+
+.geocode-color-btn.geocode-selected {
+	border-color: var(--text-normal);
+	box-shadow: 0 0 0 2px var(--background-primary), 0 0 0 4px var(--text-normal);
+}
+
+/* Submit wrapper */
+.geocode-submit-wrapper {
+	margin-top: 8px;
+	padding-top: 4px;
+}
+
+/* Spinner animation */
+.geocode-spinning svg {
+	animation: geocode-spin 1s linear infinite;
+}
+
+@keyframes geocode-spin {
+	from { transform: rotate(0deg); }
+	to { transform: rotate(360deg); }
+}
+
+/* --- Geo button wrapper --- */
+.geocode-geo-btn-wrapper {
+	margin-bottom: 4px;
+}
+
+/* =============================================
+   Mobile responsiveness
+   ============================================= */
+@media (max-width: 500px) {
+	.geocode-icon-btn {
+		width: 44px;
+		height: 44px;
+	}
+
+	.geocode-color-btn {
+		width: 40px;
+		height: 40px;
+	}
+
+	.geocode-manual-fields {
+		flex-direction: column;
+		gap: 8px;
+	}
+
+	.geocode-btn {
+		padding: 12px 16px;
+	}
+
+	.geocode-btn-submit {
+		padding: 16px 20px;
+		font-size: 1.1em;
+	}
+}
