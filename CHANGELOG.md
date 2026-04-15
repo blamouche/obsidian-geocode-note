@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1
+
+### Fixes
+
+- Fix ESLint errors flagged by Obsidian plugin review (floating promises, unsafe `any` types, unused imports).
+- Add proper TypeScript interfaces for Nominatim and IP geolocation API responses.
+- Add `eslint-plugin-obsidianmd` for local linting.
+- Translate all UI strings to English.
+
 ## 1.0.0
 
 ### Features

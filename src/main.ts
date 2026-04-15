@@ -79,11 +79,23 @@ const MARKER_COLORS = [
 	{ name: "black", label: "Black", hex: "#212529" },
 ];
 
+// --- API response types ---
+interface NominatimResult {
+	lat: string;
+	lon: string;
+	display_name: string;
+}
+
+interface IpApiResult {
+	latitude: number;
+	longitude: number;
+}
+
 // --- Geocoding via Nominatim (OpenStreetMap) ---
 async function geocodeAddress(address: string): Promise<{ lat: string; lon: string; display: string } | null> {
 	const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=5`;
 	const response = await requestUrl({ url });
-	const results = response.json;
+	const results = response.json as NominatimResult[];
 	if (results && results.length > 0) {
 		return {
 			lat: results[0].lat,
@@ -98,7 +110,7 @@ async function geocodeAddress(address: string): Promise<{ lat: string; lon: stri
 async function geolocateByIp(): Promise<{ lat: string; lon: string } | null> {
 	try {
 		const response = await requestUrl({ url: "https://ipapi.co/json/" });
-		const data = response.json;
+		const data = response.json as IpApiResult;
 		if (data && data.latitude && data.longitude) {
 			return {
 				lat: data.latitude.toString(),
@@ -213,7 +225,7 @@ class GeocodeModal extends Modal {
 		addressInput.addEventListener("keydown", (e) => {
 			if (e.key === "Enter") {
 				e.preventDefault();
-				doSearch();
+				void doSearch();
 			}
 		});
 
@@ -433,14 +445,15 @@ export default class GeocodeNotePlugin extends Plugin {
 			return;
 		}
 
-		new GeocodeModal(this.app, async (lat, lon, icon, color) => {
-			await this.saveFrontmatter(file, lat, lon, icon, color);
-			new Notice("Coordinates saved!");
+		new GeocodeModal(this.app, (lat, lon, icon, color) => {
+			void this.saveFrontmatter(file, lat, lon, icon, color).then(() => {
+				new Notice("Coordinates saved!");
+			});
 		}).open();
 	}
 
 	private async saveFrontmatter(file: TFile, lat: string, lon: string, icon: string, color: string) {
-		await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+		await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 			frontmatter["coordinates"] = [lat, lon];
 			frontmatter["icon"] = icon;
 			frontmatter["color"] = color;
