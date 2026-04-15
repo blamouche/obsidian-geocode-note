@@ -1,4 +1,4 @@
-import { App, Modal, Notice, Plugin, Setting, setIcon, TFile, requestUrl } from "obsidian";
+import { App, Modal, Notice, Plugin, setIcon, TFile, requestUrl } from "obsidian";
 
 // --- Icon catalog for map markers ---
 const MARKER_ICONS: { category: string; icons: { name: string; label: string }[] }[] = [
@@ -165,7 +165,7 @@ class GeocodeModal extends Modal {
 		const locateIcon = btn.createSpan({ cls: "geocode-btn-icon" });
 		setIcon(locateIcon, "locate");
 		btn.prepend(locateIcon);
-		btn.addEventListener("click", () => this.handleGeolocation(btn));
+		btn.addEventListener("click", () => void this.handleGeolocation(btn));
 
 		// Address search
 		const addressWrapper = section.createDiv({ cls: "geocode-address-wrapper" });
@@ -209,7 +209,7 @@ class GeocodeModal extends Modal {
 			}
 		};
 
-		searchBtn.addEventListener("click", doSearch);
+		searchBtn.addEventListener("click", () => void doSearch());
 		addressInput.addEventListener("keydown", (e) => {
 			if (e.key === "Enter") {
 				e.preventDefault();
@@ -403,7 +403,7 @@ class GeocodeModal extends Modal {
 
 // --- Plugin ---
 export default class GeocodeNotePlugin extends Plugin {
-	async onload() {
+	onload(): void {
 		// Ribbon icon
 		this.addRibbonIcon("map-pin", "Geocode note", () => {
 			this.openGeocodeModal();
