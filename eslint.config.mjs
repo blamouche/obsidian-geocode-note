@@ -12,6 +12,8 @@ export default defineConfig([
 			globals: {
 				navigator: "readonly",
 				GeolocationPosition: "readonly",
+				setTimeout: "readonly",
+				clearTimeout: "readonly",
 			},
 		},
 	},

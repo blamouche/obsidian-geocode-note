@@ -1,4 +1,15 @@
-import { App, Modal, Notice, Plugin, setIcon, TFile, requestUrl } from "obsidian";
+import {
+	App,
+	Modal,
+	Notice,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	setIcon,
+	TFile,
+	requestUrl,
+} from "obsidian";
+import * as L from "leaflet";
 
 // --- Icon catalog for map markers ---
 const MARKER_ICONS: { category: string; icons: { name: string; label: string }[] }[] = [
@@ -79,6 +90,17 @@ const MARKER_COLORS = [
 	{ name: "black", label: "Black", hex: "#212529" },
 ];
 
+// --- Settings ---
+type PrefillSource = "none" | "title" | "address";
+
+interface GeocodeNoteSettings {
+	prefillSource: PrefillSource;
+}
+
+const DEFAULT_SETTINGS: GeocodeNoteSettings = {
+	prefillSource: "none",
+};
+
 // --- API response types ---
 interface NominatimResult {
 	lat: string;
@@ -106,6 +128,18 @@ async function geocodeAddress(address: string): Promise<{ lat: string; lon: stri
 	return null;
 }
 
+// --- Reverse geocoding via Nominatim ---
+async function reverseGeocode(lat: string, lon: string): Promise<string | null> {
+	try {
+		const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
+		const response = await requestUrl({ url });
+		const data = response.json as { display_name?: string };
+		return data?.display_name ?? null;
+	} catch {
+		return null;
+	}
+}
+
 // --- IP-based geolocation fallback (for desktop / Electron) ---
 async function geolocateByIp(): Promise<{ lat: string; lon: string } | null> {
 	try {
@@ -123,22 +157,57 @@ async function geolocateByIp(): Promise<{ lat: string; lon: string } | null> {
 	return null;
 }
 
+// --- Modal initialization options ---
+interface GeocodeModalInitial {
+	lat?: string;
+	lon?: string;
+	icon?: string;
+	color?: string;
+	address?: string;
+	prefillQuery?: string;
+	isUpdate?: boolean;
+}
+
+type GeocodeModalSubmit = (
+	lat: string,
+	lon: string,
+	icon: string,
+	color: string,
+	address: string
+) => void;
+
 // --- Main Modal ---
 class GeocodeModal extends Modal {
-	private latitude = "";
-	private longitude = "";
-	private selectedIcon = "map-pin";
-	private selectedColor = "red";
-	private onSubmit: (lat: string, lon: string, icon: string, color: string) => void;
+	private latitude: string;
+	private longitude: string;
+	private selectedIcon: string;
+	private selectedColor: string;
+	private address: string;
+	private initialPrefillQuery: string;
+	private isUpdate: boolean;
+	private onSubmit: GeocodeModalSubmit;
 
 	// DOM refs for dynamic updates
 	private coordDisplay: HTMLElement | null = null;
 	private iconGrid: HTMLElement | null = null;
 	private colorGrid: HTMLElement | null = null;
 	private submitBtn: HTMLButtonElement | null = null;
+	private mapWrapper: HTMLElement | null = null;
+	private mapEl: HTMLElement | null = null;
+	private map: L.Map | null = null;
+	private marker: L.Marker | null = null;
+	private addressInput: HTMLInputElement | null = null;
+	private reverseGeocodeToken = 0;
 
-	constructor(app: App, onSubmit: (lat: string, lon: string, icon: string, color: string) => void) {
+	constructor(app: App, initial: GeocodeModalInitial, onSubmit: GeocodeModalSubmit) {
 		super(app);
+		this.latitude = initial.lat ?? "";
+		this.longitude = initial.lon ?? "";
+		this.selectedIcon = initial.icon ?? "map-pin";
+		this.selectedColor = initial.color ?? "red";
+		this.address = initial.address ?? "";
+		this.initialPrefillQuery = initial.prefillQuery ?? "";
+		this.isUpdate = initial.isUpdate ?? false;
 		this.onSubmit = onSubmit;
 	}
 
@@ -148,7 +217,10 @@ class GeocodeModal extends Modal {
 		contentEl.addClass("geocode-modal");
 
 		// --- Title ---
-		contentEl.createEl("h2", { text: "Geocode this note", cls: "geocode-modal-title" });
+		contentEl.createEl("h2", {
+			text: this.isUpdate ? "Update note geocoding" : "Geocode this note",
+			cls: "geocode-modal-title",
+		});
 
 		// --- Section: Coordinates ---
 		this.buildCoordinatesSection(contentEl);
@@ -186,6 +258,10 @@ class GeocodeModal extends Modal {
 			cls: "geocode-address-input",
 			placeholder: "Search for an address...",
 		});
+		this.addressInput = addressInput;
+		if (this.initialPrefillQuery) {
+			addressInput.value = this.initialPrefillQuery;
+		}
 		const searchBtn = addressWrapper.createEl("button", { cls: "geocode-btn geocode-btn-secondary" });
 		setIcon(searchBtn, "search");
 		searchBtn.setAttribute("aria-label", "Search");
@@ -205,6 +281,7 @@ class GeocodeModal extends Modal {
 				if (result) {
 					this.latitude = result.lat;
 					this.longitude = result.lon;
+					this.address = result.display;
 					this.updateCoordDisplay();
 					this.updateSubmitState();
 					new Notice(`Found: ${result.display}`);
@@ -250,6 +327,7 @@ class GeocodeModal extends Modal {
 		});
 		latInput.addEventListener("input", () => {
 			this.latitude = latInput.value.trim();
+			this.address = "";
 			this.updateCoordDisplay();
 			this.updateSubmitState();
 		});
@@ -263,9 +341,21 @@ class GeocodeModal extends Modal {
 		});
 		lonInput.addEventListener("input", () => {
 			this.longitude = lonInput.value.trim();
+			this.address = "";
 			this.updateCoordDisplay();
 			this.updateSubmitState();
 		});
+
+		// Map preview
+		this.mapWrapper = section.createDiv({ cls: "geocode-map-wrapper geocode-hidden" });
+		this.mapEl = this.mapWrapper.createDiv({ cls: "geocode-map" });
+		this.mapWrapper.createDiv({
+			cls: "geocode-map-hint",
+			text: "Drag the marker to fine-tune the location",
+		});
+
+		// Now that the map container exists, sync its visibility with current coords
+		this.updateMap();
 	}
 
 	private async handleGeolocation(btn: HTMLButtonElement) {
@@ -284,6 +374,7 @@ class GeocodeModal extends Modal {
 		const onSuccess = (lat: string, lon: string, approximate: boolean) => {
 			this.latitude = lat;
 			this.longitude = lon;
+			this.address = "";
 			this.updateCoordDisplay();
 			this.updateSubmitState();
 			resetBtn();
@@ -374,7 +465,13 @@ class GeocodeModal extends Modal {
 		this.submitBtn.disabled = true;
 		this.submitBtn.addEventListener("click", () => {
 			this.close();
-			this.onSubmit(this.latitude, this.longitude, this.selectedIcon, this.selectedColor);
+			this.onSubmit(
+				this.latitude,
+				this.longitude,
+				this.selectedIcon,
+				this.selectedColor,
+				this.address
+			);
 		});
 	}
 
@@ -387,11 +484,94 @@ class GeocodeModal extends Modal {
 			this.coordDisplay.setText("No coordinates selected");
 			this.coordDisplay.addClass("geocode-coord-empty");
 		}
+		this.updateMap();
+	}
+
+	private parseCoords(): { lat: number; lon: number } | null {
+		const lat = parseFloat(this.latitude);
+		const lon = parseFloat(this.longitude);
+		if (Number.isFinite(lat) && Number.isFinite(lon)) {
+			return { lat, lon };
+		}
+		return null;
+	}
+
+	private updateMap() {
+		if (!this.mapWrapper || !this.mapEl) return;
+
+		const coords = this.parseCoords();
+		if (!coords) {
+			this.mapWrapper.addClass("geocode-hidden");
+			return;
+		}
+
+		this.mapWrapper.removeClass("geocode-hidden");
+
+		if (!this.map) {
+			const markerIcon = L.divIcon({
+				className: "geocode-leaflet-marker",
+				iconSize: [28, 28],
+				iconAnchor: [14, 28],
+			});
+
+			this.map = L.map(this.mapEl, {
+				center: [coords.lat, coords.lon],
+				zoom: 14,
+				zoomControl: true,
+				attributionControl: true,
+			});
+
+			L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+				subdomains: "abcd",
+				maxZoom: 19,
+				attribution: "© OpenStreetMap, © CARTO",
+			}).addTo(this.map);
+
+			this.marker = L.marker([coords.lat, coords.lon], {
+				draggable: true,
+				icon: markerIcon,
+			}).addTo(this.map);
+
+			this.marker.on("dragend", () => {
+				if (!this.marker) return;
+				const pos = this.marker.getLatLng();
+				this.latitude = pos.lat.toFixed(6);
+				this.longitude = pos.lng.toFixed(6);
+				if (this.coordDisplay) {
+					this.coordDisplay.setText(`${this.latitude}, ${this.longitude}`);
+					this.coordDisplay.removeClass("geocode-coord-empty");
+				}
+				this.updateSubmitState();
+				void this.refreshAddressFromCoords();
+			});
+
+			// Leaflet needs a size recalculation once the container is visible
+			setTimeout(() => this.map?.invalidateSize(), 0);
+		} else {
+			this.map.setView([coords.lat, coords.lon], this.map.getZoom());
+			this.marker?.setLatLng([coords.lat, coords.lon]);
+			setTimeout(() => this.map?.invalidateSize(), 0);
+		}
 	}
 
 	private updateSubmitState() {
 		if (!this.submitBtn) return;
 		this.submitBtn.disabled = !(this.latitude && this.longitude);
+	}
+
+	private async refreshAddressFromCoords() {
+		const lat = this.latitude;
+		const lon = this.longitude;
+		if (!lat || !lon) return;
+		const token = ++this.reverseGeocodeToken;
+		const resolved = await reverseGeocode(lat, lon);
+		// Drop the result if another request started in the meantime, or coords changed
+		if (token !== this.reverseGeocodeToken) return;
+		if (this.latitude !== lat || this.longitude !== lon) return;
+		this.address = resolved ?? "";
+		if (this.addressInput) {
+			this.addressInput.value = this.address;
+		}
 	}
 
 	private refreshIconSelection() {
@@ -409,13 +589,24 @@ class GeocodeModal extends Modal {
 	}
 
 	onClose() {
+		if (this.map) {
+			this.map.remove();
+			this.map = null;
+			this.marker = null;
+		}
 		this.contentEl.empty();
 	}
 }
 
 // --- Plugin ---
 export default class GeocodeNotePlugin extends Plugin {
-	onload(): void {
+	settings: GeocodeNoteSettings = { ...DEFAULT_SETTINGS };
+
+	async onload(): Promise<void> {
+		await this.loadSettings();
+
+		this.addSettingTab(new GeocodeSettingTab(this.app, this));
+
 		// Ribbon icon
 		this.addRibbonIcon("map-pin", "Geocode note", () => {
 			this.openGeocodeModal();
@@ -438,6 +629,15 @@ export default class GeocodeNotePlugin extends Plugin {
 		});
 	}
 
+	async loadSettings(): Promise<void> {
+		const saved = (await this.loadData()) as Partial<GeocodeNoteSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, saved ?? {});
+	}
+
+	async saveSettings(): Promise<void> {
+		await this.saveData(this.settings);
+	}
+
 	private openGeocodeModal() {
 		const file = this.app.workspace.getActiveFile();
 		if (!file) {
@@ -445,18 +645,105 @@ export default class GeocodeNotePlugin extends Plugin {
 			return;
 		}
 
-		new GeocodeModal(this.app, (lat, lon, icon, color) => {
-			void this.saveFrontmatter(file, lat, lon, icon, color).then(() => {
-				new Notice("Coordinates saved!");
+		const initial = this.buildModalInitial(file);
+		const isUpdate = initial.isUpdate === true;
+
+		new GeocodeModal(this.app, initial, (lat, lon, icon, color, address) => {
+			void this.saveFrontmatter(file, lat, lon, icon, color, address).then(() => {
+				new Notice(isUpdate ? "Coordinates updated!" : "Coordinates saved!");
 			});
 		}).open();
 	}
 
-	private async saveFrontmatter(file: TFile, lat: string, lon: string, icon: string, color: string) {
+	private buildModalInitial(file: TFile): GeocodeModalInitial {
+		const cache = this.app.metadataCache.getFileCache(file);
+		const fm = (cache?.frontmatter ?? {}) as Record<string, unknown>;
+
+		const coords = fm["coordinates"];
+		const hasCoords =
+			Array.isArray(coords) &&
+			coords.length === 2 &&
+			coords[0] != null &&
+			coords[1] != null;
+
+		const existingAddress = typeof fm["address"] === "string" ? fm["address"] : "";
+
+		const settingsPrefill = this.resolveSettingsPrefill(file, existingAddress);
+
+		if (hasCoords) {
+			const [rawLat, rawLon] = coords as unknown[];
+			return {
+				lat: String(rawLat),
+				lon: String(rawLon),
+				icon: typeof fm["icon"] === "string" ? fm["icon"] : "map-pin",
+				color: typeof fm["color"] === "string" ? fm["color"] : "red",
+				address: existingAddress,
+				prefillQuery: existingAddress || settingsPrefill,
+				isUpdate: true,
+			};
+		}
+
+		return { prefillQuery: settingsPrefill };
+	}
+
+	private resolveSettingsPrefill(file: TFile, existingAddress: string): string {
+		if (this.settings.prefillSource === "title") {
+			return file.basename;
+		}
+		if (this.settings.prefillSource === "address") {
+			return existingAddress;
+		}
+		return "";
+	}
+
+	private async saveFrontmatter(
+		file: TFile,
+		lat: string,
+		lon: string,
+		icon: string,
+		color: string,
+		address: string
+	) {
 		await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 			frontmatter["coordinates"] = [lat, lon];
 			frontmatter["icon"] = icon;
 			frontmatter["color"] = color;
+			if (address) {
+				frontmatter["address"] = address;
+			} else {
+				delete frontmatter["address"];
+			}
 		});
+	}
+}
+
+// --- Settings tab ---
+class GeocodeSettingTab extends PluginSettingTab {
+	plugin: GeocodeNotePlugin;
+
+	constructor(app: App, plugin: GeocodeNotePlugin) {
+		super(app, plugin);
+		this.plugin = plugin;
+	}
+
+	display(): void {
+		const { containerEl } = this;
+		containerEl.empty();
+
+		new Setting(containerEl)
+			.setName("Prefill search field")
+			.setDesc(
+				"When opening the geocoder, prefill the address search with a value taken from the current note."
+			)
+			.addDropdown((dd) => {
+				dd.addOption("none", "Nothing")
+					.addOption("title", "Note title")
+					.addOption("address", "Frontmatter \"address\" field")
+					.setValue(this.plugin.settings.prefillSource)
+					.onChange(async (value) => {
+						this.plugin.settings.prefillSource = value as PrefillSource;
+						await this.plugin.saveSettings();
+					});
+			});
 	}
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.0
+
+### Features
+
+- **Address field** — The geocoder now writes the resolved `address` (Nominatim `display_name`) to the note's frontmatter.
+- **Settings page** — New option to prefill the address search when opening the modal, using either the note title or the frontmatter `address` field.
+- **Update mode** — If a note already contains geocoding data, the modal reopens with existing coordinates, icon, color and address preloaded so the user can adjust them.
+- **Map preview** — Leaflet-powered preview (CartoCDN Voyager tiles) displayed once coordinates are set, with a draggable marker to fine-tune the location.
+- **Reverse geocoding** — Dragging the marker triggers a Nominatim reverse lookup to refresh the `address` field automatically.
+
 ## 1.0.1
 
 ### Fixes
