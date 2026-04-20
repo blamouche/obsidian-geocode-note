@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.3.0
+
+### Features
+
+- **Obsidian Maps integration** (experimental) — New setting that injects a geolocation button into the map views rendered by the official [Obsidian Maps](https://github.com/obsidianmd/obsidian-maps) plugin. Clicking the button recenters the map on the user's current position (device GPS with IP-based fallback) and drops a blue location marker. Re-clicking updates the marker; disabling the option cleanly removes the button and marker from all open maps.
+- **Settings** — New "Experimental" section exposing the Obsidian Maps integration. The toggle is auto-disabled with an explanatory message when the Obsidian Maps plugin is not installed or not enabled.
+
 ## 1.2.0
 
 ### Features
