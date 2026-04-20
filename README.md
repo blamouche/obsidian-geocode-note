@@ -6,10 +6,14 @@ Designed to work seamlessly with map plugins like [Obsidian Map View](https://gi
 
 ## Features
 
-- **Three ways to set coordinates:**
+- **Four ways to set coordinates:**
   - **Current location** — Uses device geolocation (GPS on mobile, IP-based fallback on desktop)
   - **Address search** — Powered by [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/) (free, no API key needed)
   - **Manual entry** — Type latitude and longitude directly
+  - **Draggable map marker** — Fine-tune the position on an interactive [Leaflet](https://leafletjs.com/) map (CartoCDN tiles); the address is refreshed via reverse geocoding
+- **Resolved address saved to frontmatter** — Keeps the human-readable address alongside the coordinates
+- **Update mode** — Reopen a previously geocoded note and the modal reloads existing coordinates, icon, color and address for quick edits
+- **Prefill from note content** — Configure the plugin to prefill the address search from the note title or from the frontmatter `address` field
 - **Icon picker** — 42 icons from [Lucide](https://lucide.dev/) organized in 4 categories (Places, Nature, Transport, Activities)
 - **Color picker** — 10 color options for your map marker
 - **Mobile-friendly** — Responsive UI with large touch targets, works on both phone and desktop
@@ -26,6 +30,7 @@ coordinates:
   - "2.294481"
 icon: "landmark"
 color: "red"
+address: "Tour Eiffel, 5, Avenue Anatole France, Paris, France"
 ---
 ```
 
@@ -34,6 +39,7 @@ color: "red"
 | `coordinates` | Array of two strings: latitude and longitude |
 | `icon` | Lucide icon name for the map marker |
 | `color` | Color name for the map marker |
+| `address` | Human-readable address resolved from the geocoder (omitted when coordinates come from manual entry or pure geolocation) |
 
 ## Usage
 
@@ -46,8 +52,9 @@ color: "red"
 ### Setting coordinates
 
 1. **Current location** — Click "My current location". On mobile, the device GPS is used. On desktop, an approximate IP-based location is provided.
-2. **Address search** — Type an address in the search field and press Enter or click the search button. The first result from OpenStreetMap is used.
+2. **Address search** — Type an address in the search field and press Enter or click the search button. The first result from OpenStreetMap is used, and its full address is stored in the `address` frontmatter field.
 3. **Manual entry** — Click "Enter coordinates manually" to reveal latitude/longitude fields.
+4. **Fine-tune on the map** — Once coordinates are set, a Leaflet map appears. Drag the marker to adjust the position; the `address` field is refreshed automatically via reverse geocoding.
 
 ### Choosing an icon
 
@@ -66,7 +73,19 @@ Click one of the 10 color circles: red, blue, green, orange, purple, yellow, pin
 
 ### Saving
 
-Click **"Save"** to write the coordinates, icon, and color to the note's frontmatter. If the note already has these fields, they will be updated.
+Click **"Save"** to write the coordinates, icon, color and address to the note's frontmatter.
+
+### Updating an existing note
+
+If the active note already contains geocoding data, opening the modal switches to **update mode**: the existing coordinates, icon, color and address are preloaded, the map is centered on the current position, and saving overwrites the frontmatter fields in place.
+
+## Settings
+
+Open **Settings → Community plugins → Geocode Note** to configure:
+
+| Option | Values | Description |
+|--------|--------|-------------|
+| **Prefill search field** | `Nothing` (default), `Note title`, `Frontmatter "address" field` | When the modal opens, the address search input is prefilled with the selected source. In update mode the existing `address` is preferred; this fallback is used when it is missing. |
 
 ## Installation
 
