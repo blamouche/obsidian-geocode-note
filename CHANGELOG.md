@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0
+
+### Features
+
+- **Bulk export** — New "Export" section in the settings panel to export every geocoded note from the vault to standard formats: GeoJSON (RFC 7946), KML 2.2, GPX 1.1, and CSV. Files are downloaded as `geocoded-notes-YYYY-MM-DD.<ext>`.
+- **Settings layout** — Options and Export are now grouped under dedicated headings in the settings tab.
+
 ## 1.1.0
 
 ### Features

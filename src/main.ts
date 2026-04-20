@@ -598,6 +598,164 @@ class GeocodeModal extends Modal {
 	}
 }
 
+// --- Export types & helpers ---
+type ExportFormat = "geojson" | "kml" | "gpx" | "csv";
+
+interface GeocodedNote {
+	title: string;
+	path: string;
+	lat: number;
+	lon: number;
+	address: string;
+	icon: string;
+	color: string;
+}
+
+function escapeXml(value: string): string {
+	return value
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;")
+		.replace(/'/g, "&apos;");
+}
+
+function escapeCsv(value: string): string {
+	if (/[",\r\n]/.test(value)) {
+		return `"${value.replace(/"/g, '""')}"`;
+	}
+	return value;
+}
+
+function buildGeoJson(notes: GeocodedNote[]): string {
+	const features = notes.map((n) => ({
+		type: "Feature",
+		geometry: {
+			type: "Point",
+			coordinates: [n.lon, n.lat],
+		},
+		properties: {
+			name: n.title,
+			path: n.path,
+			address: n.address,
+			icon: n.icon,
+			color: n.color,
+		},
+	}));
+	return JSON.stringify(
+		{
+			type: "FeatureCollection",
+			features,
+		},
+		null,
+		2
+	);
+}
+
+function buildKml(notes: GeocodedNote[]): string {
+	const placemarks = notes
+		.map(
+			(n) =>
+				`    <Placemark>\n` +
+				`      <name>${escapeXml(n.title)}</name>\n` +
+				`      <description>${escapeXml(n.address)}</description>\n` +
+				`      <Point><coordinates>${n.lon},${n.lat},0</coordinates></Point>\n` +
+				`    </Placemark>`
+		)
+		.join("\n");
+	return (
+		`<?xml version="1.0" encoding="UTF-8"?>\n` +
+		`<kml xmlns="http://www.opengis.net/kml/2.2">\n` +
+		`  <Document>\n` +
+		`    <name>Obsidian geocoded notes</name>\n` +
+		`${placemarks}\n` +
+		`  </Document>\n` +
+		`</kml>\n`
+	);
+}
+
+function buildGpx(notes: GeocodedNote[]): string {
+	const waypoints = notes
+		.map(
+			(n) =>
+				`  <wpt lat="${n.lat}" lon="${n.lon}">\n` +
+				`    <name>${escapeXml(n.title)}</name>\n` +
+				`    <desc>${escapeXml(n.address)}</desc>\n` +
+				`  </wpt>`
+		)
+		.join("\n");
+	return (
+		`<?xml version="1.0" encoding="UTF-8"?>\n` +
+		`<gpx version="1.1" creator="Obsidian Geocode Note" xmlns="http://www.topografix.com/GPX/1/1">\n` +
+		`${waypoints}\n` +
+		`</gpx>\n`
+	);
+}
+
+function buildCsv(notes: GeocodedNote[]): string {
+	const header = "title,latitude,longitude,address,icon,color,path";
+	const rows = notes.map((n) =>
+		[n.title, n.lat, n.lon, n.address, n.icon, n.color, n.path]
+			.map((v) => escapeCsv(String(v)))
+			.join(",")
+	);
+	return [header, ...rows].join("\n") + "\n";
+}
+
+const EXPORT_FORMATS: {
+	format: ExportFormat;
+	label: string;
+	description: string;
+	extension: string;
+	mime: string;
+	build: (notes: GeocodedNote[]) => string;
+}[] = [
+	{
+		format: "geojson",
+		label: "GeoJSON",
+		description: "RFC 7946 — compatible with Leaflet, Mapbox, QGIS, ArcGIS.",
+		extension: "geojson",
+		mime: "application/geo+json",
+		build: buildGeoJson,
+	},
+	{
+		format: "kml",
+		label: "KML",
+		description: "OGC KML 2.2 — opens in Google Earth and Google My Maps.",
+		extension: "kml",
+		mime: "application/vnd.google-earth.kml+xml",
+		build: buildKml,
+	},
+	{
+		format: "gpx",
+		label: "GPX",
+		description: "GPS Exchange 1.1 — waypoints for GPS devices and outdoor apps.",
+		extension: "gpx",
+		mime: "application/gpx+xml",
+		build: buildGpx,
+	},
+	{
+		format: "csv",
+		label: "CSV",
+		description: "Simple tabular export — opens in Excel, Numbers, Google Sheets.",
+		extension: "csv",
+		mime: "text/csv",
+		build: buildCsv,
+	},
+];
+
+function downloadBlob(content: string, filename: string, mime: string) {
+	const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+	const url = URL.createObjectURL(blob);
+	const link = document.createElement("a");
+	link.href = url;
+	link.download = filename;
+	document.body.appendChild(link);
+	link.click();
+	link.remove();
+	setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 // --- Plugin ---
 export default class GeocodeNotePlugin extends Plugin {
 	settings: GeocodeNoteSettings = { ...DEFAULT_SETTINGS };
@@ -696,6 +854,50 @@ export default class GeocodeNotePlugin extends Plugin {
 		return "";
 	}
 
+	collectGeocodedNotes(): GeocodedNote[] {
+		const notes: GeocodedNote[] = [];
+		for (const file of this.app.vault.getMarkdownFiles()) {
+			const cache = this.app.metadataCache.getFileCache(file);
+			const fm = cache?.frontmatter as Record<string, unknown> | undefined;
+			if (!fm) continue;
+
+			const coords = fm["coordinates"];
+			if (!Array.isArray(coords) || coords.length !== 2) continue;
+
+			const lat = parseFloat(String(coords[0]));
+			const lon = parseFloat(String(coords[1]));
+			if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+
+			notes.push({
+				title: file.basename,
+				path: file.path,
+				lat,
+				lon,
+				address: typeof fm["address"] === "string" ? fm["address"] : "",
+				icon: typeof fm["icon"] === "string" ? fm["icon"] : "map-pin",
+				color: typeof fm["color"] === "string" ? fm["color"] : "red",
+			});
+		}
+		return notes;
+	}
+
+	exportGeocodedNotes(format: ExportFormat): void {
+		const spec = EXPORT_FORMATS.find((f) => f.format === format);
+		if (!spec) return;
+
+		const notes = this.collectGeocodedNotes();
+		if (notes.length === 0) {
+			new Notice("No geocoded notes found to export.");
+			return;
+		}
+
+		const content = spec.build(notes);
+		const timestamp = new Date().toISOString().slice(0, 10);
+		const filename = `geocoded-notes-${timestamp}.${spec.extension}`;
+		downloadBlob(content, filename, spec.mime);
+		new Notice(`Exported ${notes.length} note${notes.length > 1 ? "s" : ""} to ${spec.label}.`);
+	}
+
 	private async saveFrontmatter(
 		file: TFile,
 		lat: string,
@@ -730,6 +932,8 @@ class GeocodeSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
+		new Setting(containerEl).setName("Options").setHeading();
+
 		new Setting(containerEl)
 			.setName("Prefill search field")
 			.setDesc(
@@ -745,5 +949,28 @@ class GeocodeSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
+
+		new Setting(containerEl).setName("Export").setHeading();
+
+		const count = this.plugin.collectGeocodedNotes().length;
+		const summary = containerEl.createDiv({ cls: "geocode-export-summary" });
+		summary.setText(
+			count === 0
+				? "No geocoded notes found in this vault yet."
+				: `${count} geocoded note${count > 1 ? "s" : ""} available for export.`
+		);
+
+		for (const spec of EXPORT_FORMATS) {
+			new Setting(containerEl)
+				.setName(spec.label)
+				.setDesc(spec.description)
+				.addButton((btn) => {
+					btn.setButtonText(`Export as ${spec.label}`)
+						.setCta()
+						.onClick(() => {
+							this.plugin.exportGeocodedNotes(spec.format);
+						});
+				});
+		}
 	}
 }

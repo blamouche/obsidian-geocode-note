@@ -375,6 +375,16 @@
 		font-size: 1.1em;
 	}
 }
+/* Export section summary (settings tab) */
+.geocode-export-summary {
+	margin: 4px 0 12px 0;
+	padding: 8px 12px;
+	border-radius: 6px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: 0.9em;
+}
+
 /* required styles */
 
 .leaflet-pane,
