@@ -375,6 +375,25 @@
 		font-size: 1.1em;
 	}
 }
+/* =============================================
+   Obsidian Maps — injected locate control (experimental)
+   ============================================= */
+.geocode-maps-locate-btn {
+	display: flex !important;
+	align-items: center;
+	justify-content: center;
+}
+
+.geocode-maps-locate-btn svg {
+	width: 18px;
+	height: 18px;
+}
+
+.geocode-maps-locate-btn.geocode-maps-locate-busy {
+	opacity: 0.5;
+	cursor: wait;
+}
+
 /* Export section summary (settings tab) */
 .geocode-export-summary {
 	margin: 4px 0 12px 0;

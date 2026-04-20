@@ -95,10 +95,12 @@ type PrefillSource = "none" | "title" | "address";
 
 interface GeocodeNoteSettings {
 	prefillSource: PrefillSource;
+	addLocateButtonToObsidianMaps: boolean;
 }
 
 const DEFAULT_SETTINGS: GeocodeNoteSettings = {
 	prefillSource: "none",
+	addLocateButtonToObsidianMaps: false,
 };
 
 // --- API response types ---
@@ -756,9 +758,189 @@ function downloadBlob(content: string, filename: string, mime: string) {
 	setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+// --- MapLibre IControl (duck-typed) injected into obsidian-maps views ---
+// We avoid bundling maplibre-gl — MapLibre's `addControl` only needs `{ onAdd, onRemove }`.
+interface DuckGeoJsonSource {
+	setData: (data: unknown) => unknown;
+}
+
+interface DuckMapLibreMap {
+	addControl: (control: unknown, position?: string) => unknown;
+	removeControl: (control: unknown) => unknown;
+	flyTo?: (opts: { center: [number, number]; zoom?: number }) => unknown;
+	setCenter?: (center: [number, number]) => unknown;
+	getZoom?: () => number;
+	isStyleLoaded?: () => boolean;
+	once?: (event: string, handler: () => void) => unknown;
+	getSource?: (id: string) => DuckGeoJsonSource | undefined;
+	addSource?: (id: string, source: unknown) => unknown;
+	addLayer?: (layer: unknown) => unknown;
+	getLayer?: (id: string) => unknown;
+	removeLayer?: (id: string) => unknown;
+	removeSource?: (id: string) => unknown;
+}
+
+const LOCATE_SOURCE_ID = "geocode-note-locate-source";
+const LOCATE_LAYER_HALO = "geocode-note-locate-halo";
+const LOCATE_LAYER_DOT = "geocode-note-locate-dot";
+
+class MapLibreLocateControl {
+	private map: DuckMapLibreMap | null = null;
+	private container: HTMLElement | null = null;
+	private button: HTMLButtonElement | null = null;
+	private busy = false;
+
+	onAdd(map: DuckMapLibreMap): HTMLElement {
+		this.map = map;
+		const container = document.createElement("div");
+		container.className = "maplibregl-ctrl maplibregl-ctrl-group geocode-maps-locate";
+
+		const button = document.createElement("button");
+		button.type = "button";
+		button.className = "geocode-maps-locate-btn";
+		button.setAttribute("aria-label", "Find my location");
+		button.title = "Find my location";
+		setIcon(button, "locate-fixed");
+
+		button.addEventListener("click", () => void this.handleClick());
+
+		container.appendChild(button);
+		this.container = container;
+		this.button = button;
+		return container;
+	}
+
+	onRemove(): void {
+		if (this.map) {
+			try {
+				if (this.map.getLayer?.(LOCATE_LAYER_DOT)) this.map.removeLayer?.(LOCATE_LAYER_DOT);
+				if (this.map.getLayer?.(LOCATE_LAYER_HALO)) this.map.removeLayer?.(LOCATE_LAYER_HALO);
+				if (this.map.getSource?.(LOCATE_SOURCE_ID)) this.map.removeSource?.(LOCATE_SOURCE_ID);
+			} catch {
+				// ignore
+			}
+		}
+		this.container?.remove();
+		this.container = null;
+		this.button = null;
+		this.map = null;
+	}
+
+	private async handleClick() {
+		if (this.busy || !this.map || !this.button) return;
+		this.busy = true;
+		this.button.classList.add("geocode-maps-locate-busy");
+
+		try {
+			const pos = await this.getPosition();
+			if (!pos) {
+				new Notice("Unable to get your location.");
+				return;
+			}
+			const lngLat: [number, number] = [pos.lon, pos.lat];
+			const currentZoom = this.map.getZoom?.() ?? 10;
+			const targetZoom = Math.max(currentZoom, 13);
+			if (this.map.flyTo) {
+				this.map.flyTo({ center: lngLat, zoom: targetZoom });
+			} else if (this.map.setCenter) {
+				this.map.setCenter(lngLat);
+			}
+			this.placeLocationMarker(lngLat);
+			const prefix = pos.approximate ? "Approximate location" : "Location";
+			new Notice(`${prefix}: ${pos.lat.toFixed(5)}, ${pos.lon.toFixed(5)}`);
+		} finally {
+			this.busy = false;
+			this.button?.classList.remove("geocode-maps-locate-busy");
+		}
+	}
+
+	private placeLocationMarker(lngLat: [number, number]) {
+		const map = this.map;
+		if (!map) return;
+		const geojson = {
+			type: "FeatureCollection",
+			features: [
+				{
+					type: "Feature",
+					geometry: { type: "Point", coordinates: lngLat },
+					properties: {},
+				},
+			],
+		};
+
+		const render = () => {
+			try {
+				const existing = map.getSource?.(LOCATE_SOURCE_ID);
+				if (existing && typeof existing.setData === "function") {
+					existing.setData(geojson);
+					return;
+				}
+				map.addSource?.(LOCATE_SOURCE_ID, { type: "geojson", data: geojson });
+				map.addLayer?.({
+					id: LOCATE_LAYER_HALO,
+					type: "circle",
+					source: LOCATE_SOURCE_ID,
+					paint: {
+						"circle-radius": 14,
+						"circle-color": "#1971c2",
+						"circle-opacity": 0.2,
+						"circle-stroke-width": 0,
+					},
+				});
+				map.addLayer?.({
+					id: LOCATE_LAYER_DOT,
+					type: "circle",
+					source: LOCATE_SOURCE_ID,
+					paint: {
+						"circle-radius": 7,
+						"circle-color": "#1971c2",
+						"circle-stroke-width": 3,
+						"circle-stroke-color": "#ffffff",
+					},
+				});
+			} catch {
+				// ignore — style mismatch or map disposed
+			}
+		};
+
+		if (map.isStyleLoaded?.() === false && typeof map.once === "function") {
+			map.once("load", render);
+		} else {
+			render();
+		}
+	}
+
+	private async getPosition(): Promise<{ lat: number; lon: number; approximate: boolean } | null> {
+		if (navigator.geolocation) {
+			try {
+				const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+					navigator.geolocation.getCurrentPosition(resolve, reject, {
+						enableHighAccuracy: true,
+						timeout: 10000,
+					});
+				});
+				return { lat: pos.coords.latitude, lon: pos.coords.longitude, approximate: false };
+			} catch {
+				// fall through to IP
+			}
+		}
+		const ip = await geolocateByIp();
+		if (ip) {
+			return { lat: parseFloat(ip.lat), lon: parseFloat(ip.lon), approximate: true };
+		}
+		return null;
+	}
+}
+
 // --- Plugin ---
 export default class GeocodeNotePlugin extends Plugin {
 	settings: GeocodeNoteSettings = { ...DEFAULT_SETTINGS };
+
+	private obsidianMapsPatch: {
+		registration: { factory: (controller: unknown, containerEl: HTMLElement) => unknown };
+		origFactory: (controller: unknown, containerEl: HTMLElement) => unknown;
+		controls: WeakMap<object, MapLibreLocateControl>;
+	} | null = null;
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
@@ -785,6 +967,27 @@ export default class GeocodeNotePlugin extends Plugin {
 				return false;
 			},
 		});
+
+		// Experimental: inject locate control into obsidian-maps plugin views
+		this.app.workspace.onLayoutReady(() => {
+			if (this.settings.addLocateButtonToObsidianMaps) {
+				this.applyObsidianMapsPatch();
+			}
+		});
+		this.registerEvent(
+			this.app.workspace.on("layout-change", () => {
+				if (!this.settings.addLocateButtonToObsidianMaps) return;
+				if (!this.obsidianMapsPatch) {
+					this.applyObsidianMapsPatch();
+				} else {
+					this.attachLocateToExistingMapViews(this.obsidianMapsPatch.controls);
+				}
+			})
+		);
+	}
+
+	onunload(): void {
+		this.removeObsidianMapsPatch();
 	}
 
 	async loadSettings(): Promise<void> {
@@ -898,6 +1101,199 @@ export default class GeocodeNotePlugin extends Plugin {
 		new Notice(`Exported ${notes.length} note${notes.length > 1 ? "s" : ""} to ${spec.label}.`);
 	}
 
+	// --- Experimental: obsidian-maps patching ---
+
+	isObsidianMapsAvailable(): boolean {
+		const app = this.app as unknown as { plugins?: { getPlugin?: (id: string) => unknown } };
+		return Boolean(app.plugins?.getPlugin?.("maps"));
+	}
+
+	applyObsidianMapsPatch(): void {
+		if (this.obsidianMapsPatch) return;
+		try {
+			const reg = this.findMapBasesRegistration();
+			if (!reg || typeof reg.factory !== "function") return;
+
+			const origFactory = reg.factory.bind(reg) as (
+				controller: unknown,
+				containerEl: HTMLElement
+			) => unknown;
+			const controls = new WeakMap<object, MapLibreLocateControl>();
+
+			reg.factory = (controller: unknown, containerEl: HTMLElement) => {
+				const view = origFactory(controller, containerEl);
+				this.hookViewForLocate(view, controls);
+				return view;
+			};
+
+			this.obsidianMapsPatch = { registration: reg, origFactory, controls };
+			this.attachLocateToExistingMapViews(controls);
+		} catch {
+			// Experimental hook: silently no-op if obsidian-maps internals have changed
+		}
+	}
+
+	removeObsidianMapsPatch(): void {
+		if (!this.obsidianMapsPatch) return;
+		const { registration, origFactory, controls } = this.obsidianMapsPatch;
+		try {
+			registration.factory = origFactory;
+		} catch {
+			// ignore
+		}
+
+		const workspace = this.app.workspace as unknown as {
+			iterateAllLeaves?: (cb: (leaf: { view?: unknown }) => void) => void;
+		};
+		workspace.iterateAllLeaves?.((leaf) => {
+			this.findMapViewsIn(leaf.view).forEach((mv) => {
+				const map = (mv as { map?: DuckMapLibreMap }).map;
+				if (!map) return;
+				const ctrl = controls.get(map);
+				if (!ctrl) return;
+				try {
+					map.removeControl(ctrl);
+				} catch {
+					// ignore
+				}
+				controls.delete(map);
+			});
+		});
+
+		this.obsidianMapsPatch = null;
+	}
+
+	private findMapBasesRegistration(): {
+		factory: (controller: unknown, containerEl: HTMLElement) => unknown;
+	} | null {
+		const app = this.app as unknown as {
+			internalPlugins?: {
+				getPluginById?: (id: string) => { instance?: unknown } | undefined;
+				plugins?: Record<string, { instance?: unknown } | undefined>;
+			};
+		};
+		const bases =
+			app.internalPlugins?.getPluginById?.("bases")?.instance ??
+			app.internalPlugins?.plugins?.["bases"]?.instance;
+		if (!bases) return null;
+
+		const b = bases as {
+			getRegistration?: (id: string) => unknown;
+			getViewRegistration?: (id: string) => unknown;
+			registrations?: Map<string, unknown> | Record<string, unknown>;
+			viewRegistrations?: Map<string, unknown> | Record<string, unknown>;
+			registeredViews?: Map<string, unknown> | Record<string, unknown>;
+		};
+
+		const lookup = (
+			store: Map<string, unknown> | Record<string, unknown> | undefined
+		): unknown => {
+			if (!store) return undefined;
+			if (store instanceof Map) return store.get("map");
+			return store["map"];
+		};
+
+		const candidates: unknown[] = [
+			b.getRegistration?.("map"),
+			b.getViewRegistration?.("map"),
+			lookup(b.registrations),
+			lookup(b.viewRegistrations),
+			lookup(b.registeredViews),
+		];
+
+		for (const c of candidates) {
+			if (c && typeof (c as { factory?: unknown }).factory === "function") {
+				return c as { factory: (controller: unknown, containerEl: HTMLElement) => unknown };
+			}
+		}
+		return null;
+	}
+
+	private hookViewForLocate(view: unknown, controls: WeakMap<object, MapLibreLocateControl>) {
+		if (!view) return;
+		const v = view as {
+			initializeMap?: (...args: unknown[]) => unknown;
+			map?: DuckMapLibreMap;
+		};
+		const origInit = v.initializeMap;
+		if (typeof origInit !== "function") return;
+
+		v.initializeMap = async (...args: unknown[]) => {
+			const result: unknown = await (origInit as (...a: unknown[]) => unknown).apply(v, args);
+			this.tryAttachControl(v, controls);
+			return result;
+		};
+
+		// Already-open view whose map is already built: attach immediately
+		this.tryAttachControl(v, controls);
+	}
+
+	private tryAttachControl(
+		view: { map?: DuckMapLibreMap },
+		controls: WeakMap<object, MapLibreLocateControl>
+	) {
+		const map = view.map;
+		if (!map || typeof map.addControl !== "function") return;
+		if (controls.has(map)) return;
+		try {
+			const ctrl = new MapLibreLocateControl();
+			map.addControl(ctrl, "top-right");
+			controls.set(map, ctrl);
+		} catch {
+			// ignore — addControl signature mismatch or internal error
+		}
+	}
+
+	private attachLocateToExistingMapViews(controls: WeakMap<object, MapLibreLocateControl>) {
+		const workspace = this.app.workspace as unknown as {
+			iterateAllLeaves?: (cb: (leaf: { view?: unknown }) => void) => void;
+		};
+		workspace.iterateAllLeaves?.((leaf) => {
+			this.findMapViewsIn(leaf.view).forEach((mv) => this.hookViewForLocate(mv, controls));
+		});
+	}
+
+	private findMapViewsIn(root: unknown): unknown[] {
+		const results: unknown[] = [];
+		const seen = new WeakSet<object>();
+		const childKeys = [
+			"_children",
+			"children",
+			"currentView",
+			"view",
+			"activeView",
+			"basesView",
+			"bases",
+			"component",
+		];
+		const visit = (node: unknown, depth: number) => {
+			if (!node || typeof node !== "object" || depth > 8) return;
+			if (seen.has(node)) return;
+			seen.add(node);
+			const n = node as Record<string, unknown> & {
+				constructor?: { name?: string };
+				initializeMap?: unknown;
+			};
+			const looksLikeMapView =
+				typeof n.initializeMap === "function" &&
+				"map" in n &&
+				"mapEl" in n;
+			if (looksLikeMapView || n.constructor?.name === "MapView") {
+				results.push(node);
+			}
+			for (const key of childKeys) {
+				const value = n[key];
+				if (Array.isArray(value)) {
+					value.forEach((c) => visit(c, depth + 1));
+				} else if (value) {
+					visit(value, depth + 1);
+				}
+			}
+		};
+		visit(root, 0);
+		return results;
+	}
+
 	private async saveFrontmatter(
 		file: TFile,
 		lat: string,
@@ -932,8 +1328,6 @@ class GeocodeSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName("Options").setHeading();
-
 		new Setting(containerEl)
 			.setName("Prefill search field")
 			.setDesc(
@@ -949,6 +1343,41 @@ class GeocodeSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
+
+		new Setting(containerEl).setName("Experimental").setHeading();
+
+		const mapsAvailable = this.plugin.isObsidianMapsAvailable();
+		const experimental = new Setting(containerEl).setName(
+			// eslint-disable-next-line obsidianmd/ui/sentence-case -- "Obsidian Maps" is a proper noun (plugin name)
+			"Add locate button to Obsidian Maps"
+		);
+		if (mapsAvailable) {
+			experimental.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case -- proper nouns
+				"Injects a geolocation button into maps rendered by the official Obsidian Maps plugin. Experimental — relies on undocumented internals and may break with future updates of Obsidian Maps."
+			);
+			experimental.addToggle((toggle) => {
+				toggle
+					.setValue(this.plugin.settings.addLocateButtonToObsidianMaps)
+					.onChange(async (value) => {
+						this.plugin.settings.addLocateButtonToObsidianMaps = value;
+						await this.plugin.saveSettings();
+						if (value) {
+							this.plugin.applyObsidianMapsPatch();
+						} else {
+							this.plugin.removeObsidianMapsPatch();
+						}
+					});
+			});
+		} else {
+			experimental.setDesc(
+				// eslint-disable-next-line obsidianmd/ui/sentence-case -- proper nouns
+				"Requires the official Obsidian Maps plugin to be installed and enabled. Not detected in this vault."
+			);
+			experimental.addToggle((toggle) => {
+				toggle.setValue(false).setDisabled(true);
+			});
+		}
 
 		new Setting(containerEl).setName("Export").setHeading();
 

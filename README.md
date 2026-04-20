@@ -21,6 +21,7 @@ Designed to work seamlessly with map plugins like [Obsidian Map View](https://gi
 - **Icon picker** — 42 icons from [Lucide](https://lucide.dev/) organized in 4 categories (Places, Nature, Transport, Activities)
 - **Color picker** — 10 color options for your map marker
 - **Bulk export** — Export every geocoded note from your vault to standard formats (GeoJSON, KML, GPX, CSV) in one click
+- **Obsidian Maps integration** (experimental) — Optionally inject a geolocation button into the map view of the official [Obsidian Maps](https://github.com/obsidianmd/obsidian-maps) plugin; clicking it recenters the map on your position and drops a marker dot
 - **Mobile-friendly** — Responsive UI with large touch targets, works on both phone and desktop
 - **No API key required** — All services used are free and open
 
@@ -93,6 +94,14 @@ Open **Settings → Community plugins → Geocode Note** to access two sections:
 | Option | Values | Description |
 |--------|--------|-------------|
 | **Prefill search field** | `Nothing` (default), `Note title`, `Frontmatter "address" field` | When the modal opens, the address search input is prefilled with the selected source. In update mode the existing `address` is preferred; this fallback is used when it is missing. |
+
+### Experimental
+
+| Option | Description |
+|--------|-------------|
+| **Add locate button to Obsidian Maps** | When the official [Obsidian Maps](https://github.com/obsidianmd/obsidian-maps) plugin is installed and enabled, injects a geolocation button into each Bases map view. Clicking it centers the map on the user's current position (device GPS, with IP-based fallback) and draws a blue location marker. Re-clicking updates the marker. Disabling the option cleanly removes the button and marker from all open maps. |
+
+> This option hooks into internals of the Obsidian Maps plugin that are not part of its public API and may break with future updates of that plugin. If the button does not appear, try closing and reopening the base tab after toggling the option.
 
 ### Export
 
