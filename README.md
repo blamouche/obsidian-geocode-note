@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="appicon.png" alt="Geocode Note" width="160" />
+</p>
+
 # Geocode Note
 
 An [Obsidian](https://obsidian.md) plugin that adds geographic metadata to your notes — coordinates, marker icon, and color — stored in the YAML frontmatter.
