@@ -20,6 +20,7 @@ Designed to work seamlessly with map plugins like [Obsidian Map View](https://gi
 - **Prefill from note content** — Configure the plugin to prefill the address search from the note title or from the frontmatter `address` field
 - **Icon picker** — 42 icons from [Lucide](https://lucide.dev/) organized in 4 categories (Places, Nature, Transport, Activities)
 - **Color picker** — 10 color options for your map marker
+- **Bulk export** — Export every geocoded note from your vault to standard formats (GeoJSON, KML, GPX, CSV) in one click
 - **Mobile-friendly** — Responsive UI with large touch targets, works on both phone and desktop
 - **No API key required** — All services used are free and open
 
@@ -85,11 +86,26 @@ If the active note already contains geocoding data, opening the modal switches t
 
 ## Settings
 
-Open **Settings → Community plugins → Geocode Note** to configure:
+Open **Settings → Community plugins → Geocode Note** to access two sections:
+
+### Options
 
 | Option | Values | Description |
 |--------|--------|-------------|
 | **Prefill search field** | `Nothing` (default), `Note title`, `Frontmatter "address" field` | When the modal opens, the address search input is prefilled with the selected source. In update mode the existing `address` is preferred; this fallback is used when it is missing. |
+
+### Export
+
+Scans every note in the vault that has a `coordinates` frontmatter field and generates a download in the chosen format. The settings panel shows how many geocoded notes are currently available.
+
+| Format | Extension | Use case |
+|--------|-----------|----------|
+| **GeoJSON** (RFC 7946) | `.geojson` | Leaflet, Mapbox, QGIS, ArcGIS, and most modern web mapping libraries |
+| **KML** 2.2 | `.kml` | Google Earth, Google My Maps |
+| **GPX** 1.1 | `.gpx` | GPS devices and outdoor apps (each note is exported as a waypoint) |
+| **CSV** | `.csv` | Excel, Numbers, Google Sheets, data analysis pipelines |
+
+Each exported entry carries the note's title, coordinates and resolved address; GeoJSON and CSV additionally include the icon, color and vault path. Files are named `geocoded-notes-YYYY-MM-DD.<ext>`.
 
 ## Installation
 
