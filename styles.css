@@ -376,6 +376,88 @@
 	}
 }
 /* =============================================
+   Inline map rendered from a ```geocode-map``` code block
+   ============================================= */
+.geocode-inline-map-wrapper {
+	margin: 0;
+	border-radius: 10px;
+	overflow: hidden;
+	border: 1px solid var(--background-modifier-border);
+	background: var(--background-secondary);
+}
+
+.geocode-inline-map {
+	width: 100%;
+	height: 240px;
+}
+
+.geocode-inline-map-placeholder {
+	padding: 14px 16px;
+	border: 1px dashed var(--background-modifier-border);
+	border-radius: 10px;
+	color: var(--text-muted);
+	font-size: 0.9em;
+	background: var(--background-secondary);
+}
+
+.geocode-block-hint {
+	margin: 4px 0 12px 0;
+	padding: 8px 12px;
+	border-radius: 6px;
+	background: var(--background-secondary);
+	color: var(--text-muted);
+	font-size: 0.9em;
+}
+
+.geocode-inline-map-marker-wrapper {
+	background: transparent !important;
+	border: none !important;
+}
+
+.geocode-inline-map-marker {
+	width: 32px;
+	height: 38px;
+	position: relative;
+	filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+}
+
+.geocode-inline-map-marker::before {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 32px;
+	height: 32px;
+	box-sizing: border-box;
+	border-radius: 50% 50% 50% 0;
+	background: var(--geocode-marker-color, #1971c2);
+	border: 2px solid #fff;
+	transform: rotate(-45deg);
+	transform-origin: center center;
+}
+
+.geocode-inline-map-marker-icon {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #fff;
+	z-index: 1;
+	pointer-events: none;
+}
+
+.geocode-inline-map-marker-icon svg {
+	width: 16px;
+	height: 16px;
+	stroke: currentColor;
+	color: currentColor;
+}
+
+/* =============================================
    Obsidian Maps — injected locate control (experimental)
    ============================================= */
 .geocode-maps-locate-btn {
