@@ -110,16 +110,34 @@ interface NominatimResult {
 	display_name: string;
 }
 
-interface IpApiResult {
-	latitude: number;
-	longitude: number;
-}
+// Nominatim's usage policy requires a descriptive User-Agent identifying the
+// application + contact URL; otherwise requests get blocked (observed on macOS).
+// See https://operations.osmfoundation.org/policies/nominatim/
+const USER_AGENT =
+	"obsidian-geocode-note (+https://github.com/blamouche/obsidian-geocode-note)";
+
+const NOMINATIM_HEADERS: Record<string, string> = {
+	"User-Agent": USER_AGENT,
+	Accept: "application/json",
+	"Accept-Language": "en",
+};
 
 // --- Geocoding via Nominatim (OpenStreetMap) ---
-async function geocodeAddress(address: string): Promise<{ lat: string; lon: string; display: string } | null> {
-	const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=5`;
-	const response = await requestUrl({ url });
-	const results = response.json as NominatimResult[];
+async function geocodeAddress(
+	address: string
+): Promise<{ lat: string; lon: string; display: string } | null> {
+	const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+		address
+	)}&limit=5`;
+	const response = await requestUrl({
+		url,
+		headers: NOMINATIM_HEADERS,
+		throw: false,
+	});
+	if (response.status < 200 || response.status >= 300) {
+		throw new Error(`Nominatim returned HTTP ${response.status}`);
+	}
+	const results = response.json as NominatimResult[] | null;
 	if (results && results.length > 0) {
 		return {
 			lat: results[0].lat,
@@ -133,9 +151,16 @@ async function geocodeAddress(address: string): Promise<{ lat: string; lon: stri
 // --- Reverse geocoding via Nominatim ---
 async function reverseGeocode(lat: string, lon: string): Promise<string | null> {
 	try {
-		const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(lat)}&lon=${encodeURIComponent(lon)}`;
-		const response = await requestUrl({ url });
-		const data = response.json as { display_name?: string };
+		const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${encodeURIComponent(
+			lat
+		)}&lon=${encodeURIComponent(lon)}`;
+		const response = await requestUrl({
+			url,
+			headers: NOMINATIM_HEADERS,
+			throw: false,
+		});
+		if (response.status < 200 || response.status >= 300) return null;
+		const data = response.json as { display_name?: string } | null;
 		return data?.display_name ?? null;
 	} catch {
 		return null;
@@ -143,18 +168,70 @@ async function reverseGeocode(lat: string, lon: string): Promise<string | null> 
 }
 
 // --- IP-based geolocation fallback (for desktop / Electron) ---
-async function geolocateByIp(): Promise<{ lat: string; lon: string } | null> {
-	try {
-		const response = await requestUrl({ url: "https://ipapi.co/json/" });
-		const data = response.json as IpApiResult;
-		if (data && data.latitude && data.longitude) {
-			return {
-				lat: data.latitude.toString(),
-				lon: data.longitude.toString(),
+// navigator.geolocation typically fails in Electron on macOS without proper
+// entitlements, so we rely on multiple IP providers to improve reliability.
+const IP_GEO_PROVIDERS: Array<{
+	url: string;
+	parse: (data: unknown) => { lat: string; lon: string } | null;
+}> = [
+	{
+		url: "https://ipapi.co/json/",
+		parse: (data) => {
+			const d = data as { latitude?: unknown; longitude?: unknown; error?: unknown };
+			if (d.error) return null;
+			const lat = typeof d.latitude === "number" ? d.latitude : parseFloat(String(d.latitude));
+			const lon = typeof d.longitude === "number" ? d.longitude : parseFloat(String(d.longitude));
+			if (Number.isFinite(lat) && Number.isFinite(lon)) {
+				return { lat: lat.toString(), lon: lon.toString() };
+			}
+			return null;
+		},
+	},
+	{
+		url: "https://ipwho.is/",
+		parse: (data) => {
+			const d = data as {
+				success?: boolean;
+				latitude?: unknown;
+				longitude?: unknown;
 			};
+			if (d.success === false) return null;
+			const lat = typeof d.latitude === "number" ? d.latitude : parseFloat(String(d.latitude));
+			const lon = typeof d.longitude === "number" ? d.longitude : parseFloat(String(d.longitude));
+			if (Number.isFinite(lat) && Number.isFinite(lon)) {
+				return { lat: lat.toString(), lon: lon.toString() };
+			}
+			return null;
+		},
+	},
+	{
+		url: "https://get.geojs.io/v1/ip/geo.json",
+		parse: (data) => {
+			const d = data as { latitude?: unknown; longitude?: unknown };
+			const lat = typeof d.latitude === "number" ? d.latitude : parseFloat(String(d.latitude));
+			const lon = typeof d.longitude === "number" ? d.longitude : parseFloat(String(d.longitude));
+			if (Number.isFinite(lat) && Number.isFinite(lon)) {
+				return { lat: lat.toString(), lon: lon.toString() };
+			}
+			return null;
+		},
+	},
+];
+
+async function geolocateByIp(): Promise<{ lat: string; lon: string } | null> {
+	for (const provider of IP_GEO_PROVIDERS) {
+		try {
+			const response = await requestUrl({
+				url: provider.url,
+				headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+				throw: false,
+			});
+			if (response.status < 200 || response.status >= 300) continue;
+			const parsed = provider.parse(response.json);
+			if (parsed) return parsed;
+		} catch {
+			// try next provider
 		}
-	} catch {
-		// silently fail, caller handles the error
 	}
 	return null;
 }
@@ -290,8 +367,9 @@ class GeocodeModal extends Modal {
 				} else {
 					new Notice("No results found for this address.");
 				}
-			} catch {
-				new Notice("Search failed. Please check your connection.");
+			} catch (err) {
+				const msg = err instanceof Error ? err.message : String(err);
+				new Notice(`Search failed: ${msg}`);
 			} finally {
 				searchBtn.disabled = false;
 				searchBtn.textContent = "";
