@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.2
+
+### Fixes
+
+- **macOS geocoding** — Address search and reverse geocoding were silently failing on macOS because Nominatim rejects Obsidian's default Electron User-Agent. Send a descriptive `User-Agent` (plus `Accept-Language`) with every Nominatim request, as required by their usage policy.
+- **IP geolocation fallback** — The single `ipapi.co` provider was unreliable (rate limits, occasional error bodies). Chain three providers (`ipapi.co`, `ipwho.is`, `get.geojs.io`) so at least one responds.
+- **Error visibility** — Network failures used to surface a generic "check your connection" message. The search Notice now shows the real error (e.g. `HTTP 403`) so the user can diagnose.
+
 ## 1.3.1
 
 ### Fixes
