@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.4.0
+
+### Features
+
+- **Inline map block** — New `geocode-map` code block that renders a Leaflet map with the note's marker (icon + color from frontmatter) wherever it's placed in the note. Displays a helpful placeholder when the note has no coordinates yet. Optional `height: <pixels>` line inside the block overrides the default height.
+- **Insert map block command** — New command palette entry "Insert map block" to drop the code block at the cursor.
+- **Settings** — New "Map code block" section with a slider for the default map height (120–480 px).
+
 ## 1.3.2
 
 ### Fixes

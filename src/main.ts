@@ -1,5 +1,7 @@
 import {
 	App,
+	MarkdownPostProcessorContext,
+	MarkdownRenderChild,
 	Modal,
 	Notice,
 	Plugin,
@@ -96,12 +98,33 @@ type PrefillSource = "none" | "title" | "address";
 interface GeocodeNoteSettings {
 	prefillSource: PrefillSource;
 	addLocateButtonToObsidianMaps: boolean;
+	inlineMapHeight: number;
 }
 
 const DEFAULT_SETTINGS: GeocodeNoteSettings = {
 	prefillSource: "none",
 	addLocateButtonToObsidianMaps: false,
+	inlineMapHeight: 240,
 };
+
+const MAP_CODE_BLOCK = "geocode-map";
+const MAP_CODE_BLOCK_SNIPPET = "```geocode-map\n```\n";
+
+function parseMapBlockOptions(source: string): { height?: number } {
+	const opts: { height?: number } = {};
+	for (const rawLine of source.split(/\r?\n/)) {
+		const line = rawLine.trim();
+		if (!line || line.startsWith("#")) continue;
+		const match = line.match(/^(\w+)\s*:\s*(.+?)\s*$/);
+		if (!match) continue;
+		const [, key, value] = match;
+		if (key === "height") {
+			const n = parseInt(value, 10);
+			if (Number.isFinite(n) && n > 0) opts.height = n;
+		}
+	}
+	return opts;
+}
 
 // --- API response types ---
 interface NominatimResult {
@@ -1010,6 +1033,85 @@ class MapLibreLocateControl {
 	}
 }
 
+// --- Inline map rendered at top of notes with geocoding ---
+interface InlineMapOptions {
+	lat: number;
+	lon: number;
+	icon: string;
+	color: string;
+	address: string;
+	height: number;
+}
+
+function resolveMarkerHex(colorName: string): string {
+	const found = MARKER_COLORS.find((c) => c.name === colorName);
+	return found ? found.hex : MARKER_COLORS[0].hex;
+}
+
+class InlineMapRenderChild extends MarkdownRenderChild {
+	private map: L.Map | null = null;
+	private readonly opts: InlineMapOptions;
+
+	constructor(containerEl: HTMLElement, opts: InlineMapOptions) {
+		super(containerEl);
+		this.opts = opts;
+	}
+
+	onload(): void {
+		this.containerEl.empty();
+		this.containerEl.addClass("geocode-inline-map-wrapper");
+
+		const mapEl = this.containerEl.createDiv({ cls: "geocode-inline-map" });
+		mapEl.style.height = `${this.opts.height}px`;
+
+		const hex = resolveMarkerHex(this.opts.color);
+		const markerEl = document.createElement("div");
+		markerEl.className = "geocode-inline-map-marker";
+		markerEl.style.setProperty("--geocode-marker-color", hex);
+		const iconEl = document.createElement("span");
+		iconEl.className = "geocode-inline-map-marker-icon";
+		setIcon(iconEl, this.opts.icon);
+		markerEl.appendChild(iconEl);
+
+		const markerIcon = L.divIcon({
+			className: "geocode-inline-map-marker-wrapper",
+			html: markerEl.outerHTML,
+			iconSize: [32, 38],
+			iconAnchor: [16, 38],
+		});
+
+		this.map = L.map(mapEl, {
+			center: [this.opts.lat, this.opts.lon],
+			zoom: 14,
+			zoomControl: true,
+			attributionControl: true,
+			scrollWheelZoom: false,
+		});
+
+		L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+			subdomains: "abcd",
+			maxZoom: 19,
+			attribution: "© OpenStreetMap, © CARTO",
+		}).addTo(this.map);
+
+		const marker = L.marker([this.opts.lat, this.opts.lon], { icon: markerIcon }).addTo(this.map);
+		if (this.opts.address) {
+			marker.bindPopup(this.opts.address);
+		}
+
+		// Leaflet needs a size recalc once the container is attached
+		setTimeout(() => this.map?.invalidateSize(), 0);
+	}
+
+	onunload(): void {
+		if (this.map) {
+			this.map.remove();
+			this.map = null;
+		}
+		this.containerEl.empty();
+	}
+}
+
 // --- Plugin ---
 export default class GeocodeNotePlugin extends Plugin {
 	settings: GeocodeNoteSettings = { ...DEFAULT_SETTINGS };
@@ -1043,6 +1145,18 @@ export default class GeocodeNotePlugin extends Plugin {
 					return true;
 				}
 				return false;
+			},
+		});
+
+		this.registerMarkdownCodeBlockProcessor(MAP_CODE_BLOCK, (source, el, ctx) => {
+			this.renderMapCodeBlock(source, el, ctx);
+		});
+
+		this.addCommand({
+			id: "insert-map-block",
+			name: "Insert map block",
+			editorCallback: (editor) => {
+				editor.replaceSelection(MAP_CODE_BLOCK_SNIPPET);
 			},
 		});
 
@@ -1123,6 +1237,63 @@ export default class GeocodeNotePlugin extends Plugin {
 		}
 
 		return { prefillQuery: settingsPrefill };
+	}
+
+	private renderMapCodeBlock(
+		source: string,
+		el: HTMLElement,
+		ctx: MarkdownPostProcessorContext
+	): void {
+		const options = parseMapBlockOptions(source);
+
+		const file = this.app.vault.getAbstractFileByPath(ctx.sourcePath);
+		if (!(file instanceof TFile)) {
+			this.renderMapPlaceholder(el, "Unable to resolve the source note.");
+			return;
+		}
+
+		const fm = this.app.metadataCache.getFileCache(file)?.frontmatter as
+			| Record<string, unknown>
+			| undefined;
+		if (!fm) {
+			this.renderMapPlaceholder(
+				el,
+				"No geocoding found — run “Geocode current note” to add coordinates."
+			);
+			return;
+		}
+
+		const coords = fm["coordinates"];
+		if (!Array.isArray(coords) || coords.length !== 2) {
+			this.renderMapPlaceholder(
+				el,
+				"No geocoding found — run “Geocode current note” to add coordinates."
+			);
+			return;
+		}
+
+		const lat = parseFloat(String(coords[0]));
+		const lon = parseFloat(String(coords[1]));
+		if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+			this.renderMapPlaceholder(el, "Invalid coordinates in frontmatter.");
+			return;
+		}
+
+		const child = new InlineMapRenderChild(el, {
+			lat,
+			lon,
+			icon: typeof fm["icon"] === "string" ? fm["icon"] : "map-pin",
+			color: typeof fm["color"] === "string" ? fm["color"] : "red",
+			address: typeof fm["address"] === "string" ? fm["address"] : "",
+			height: options.height ?? this.settings.inlineMapHeight,
+		});
+		ctx.addChild(child);
+	}
+
+	private renderMapPlaceholder(el: HTMLElement, message: string): void {
+		el.empty();
+		el.addClass("geocode-inline-map-placeholder");
+		el.setText(message);
 	}
 
 	private resolveSettingsPrefill(file: TFile, existingAddress: string): string {
@@ -1418,6 +1589,27 @@ class GeocodeSettingTab extends PluginSettingTab {
 					.setValue(this.plugin.settings.prefillSource)
 					.onChange(async (value) => {
 						this.plugin.settings.prefillSource = value as PrefillSource;
+						await this.plugin.saveSettings();
+					});
+			});
+
+		new Setting(containerEl).setName("Map code block").setHeading();
+
+		const blockHint = containerEl.createDiv({ cls: "geocode-block-hint" });
+		blockHint.setText(
+			"Insert a ```geocode-map``` block anywhere in a note to render its coordinates as a map. Override the default height per-block with `height: 320`."
+		);
+
+		new Setting(containerEl)
+			.setName("Default map height")
+			.setDesc("Height in pixels used when a geocode-map block doesn't override it.")
+			.addSlider((slider) => {
+				slider
+					.setLimits(120, 480, 10)
+					.setValue(this.plugin.settings.inlineMapHeight)
+					.setDynamicTooltip()
+					.onChange(async (value) => {
+						this.plugin.settings.inlineMapHeight = value;
 						await this.plugin.saveSettings();
 					});
 			});
