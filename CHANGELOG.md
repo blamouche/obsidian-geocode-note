@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.1
+
+### Fixes
+
+- Rephrase the experimental setting label and descriptions so they satisfy the `obsidianmd/ui/sentence-case` rule without inline disables (required by the Obsidian community plugin review bot).
+
 ## 1.3.0
 
 ### Features

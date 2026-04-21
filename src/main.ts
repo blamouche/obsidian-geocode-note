@@ -1348,13 +1348,11 @@ class GeocodeSettingTab extends PluginSettingTab {
 
 		const mapsAvailable = this.plugin.isObsidianMapsAvailable();
 		const experimental = new Setting(containerEl).setName(
-			// eslint-disable-next-line obsidianmd/ui/sentence-case -- "Obsidian Maps" is a proper noun (plugin name)
-			"Add locate button to Obsidian Maps"
+			"Add locate button to Obsidian maps"
 		);
 		if (mapsAvailable) {
 			experimental.setDesc(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case -- proper nouns
-				"Injects a geolocation button into maps rendered by the official Obsidian Maps plugin. Experimental — relies on undocumented internals and may break with future updates of Obsidian Maps."
+				"Injects a geolocation button into maps rendered by the official Obsidian maps plugin. Experimental — relies on undocumented internals and may break with future updates of Obsidian maps."
 			);
 			experimental.addToggle((toggle) => {
 				toggle
@@ -1371,8 +1369,7 @@ class GeocodeSettingTab extends PluginSettingTab {
 			});
 		} else {
 			experimental.setDesc(
-				// eslint-disable-next-line obsidianmd/ui/sentence-case -- proper nouns
-				"Requires the official Obsidian Maps plugin to be installed and enabled. Not detected in this vault."
+				"Requires the official Obsidian maps plugin to be installed and enabled. Not detected in this vault."
 			);
 			experimental.addToggle((toggle) => {
 				toggle.setValue(false).setDisabled(true);
