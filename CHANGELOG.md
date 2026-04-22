@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.5.0
+
+### Features
+
+- **Map engine migration** — Both the geocoder modal preview and the `geocode-map` code block now use MapLibre GL JS with OpenFreeMap vector styles, matching the look and feel of Obsidian's built-in Bases maps. The basemap auto-switches between the `bright` and `dark` styles based on the active Obsidian theme.
+- **Marker restyling** — Markers now rebuild live when the icon or color changes in the modal without losing the current position on the map.
+
+### Fixes
+
+- **Obsidian Maps locate button stacking** — The experimental locate button injected into Bases map views no longer duplicates when Bases already ships a native MapLibre `GeolocateControl`, and stale buttons from previous plugin versions are cleaned up on load.
+
+### Changes
+
+- Replaced the Leaflet + CARTO Voyager raster tiles with MapLibre GL + OpenFreeMap. The plugin no longer depends on Leaflet; bundle size increases accordingly.
+- esbuild target bumped to `es2020` (required by MapLibre's BigInt usage).
+
 ## 1.4.0
 
 ### Features

@@ -11,7 +11,32 @@ import {
 	TFile,
 	requestUrl,
 } from "obsidian";
-import * as L from "leaflet";
+import * as maplibregl from "maplibre-gl";
+import type { Map as MLMap, Marker as MLMarker } from "maplibre-gl";
+
+// --- Basemap styles matching Obsidian Maps (OpenFreeMap via MapLibre GL) ---
+const OPENFREEMAP_STYLE_BRIGHT = "https://tiles.openfreemap.org/styles/bright";
+const OPENFREEMAP_STYLE_DARK = "https://tiles.openfreemap.org/styles/dark";
+
+function isDarkTheme(): boolean {
+	return document.body.classList.contains("theme-dark");
+}
+
+function obsidianMapStyle(): string {
+	return isDarkTheme() ? OPENFREEMAP_STYLE_DARK : OPENFREEMAP_STYLE_BRIGHT;
+}
+
+function buildMarkerEl(iconName: string, colorName: string): HTMLElement {
+	const hex = resolveMarkerHex(colorName);
+	const markerEl = document.createElement("div");
+	markerEl.className = "geocode-inline-map-marker";
+	markerEl.style.setProperty("--geocode-marker-color", hex);
+	const iconEl = document.createElement("span");
+	iconEl.className = "geocode-inline-map-marker-icon";
+	setIcon(iconEl, iconName);
+	markerEl.appendChild(iconEl);
+	return markerEl;
+}
 
 // --- Icon catalog for map markers ---
 const MARKER_ICONS: { category: string; icons: { name: string; label: string }[] }[] = [
@@ -296,8 +321,8 @@ class GeocodeModal extends Modal {
 	private submitBtn: HTMLButtonElement | null = null;
 	private mapWrapper: HTMLElement | null = null;
 	private mapEl: HTMLElement | null = null;
-	private map: L.Map | null = null;
-	private marker: L.Marker | null = null;
+	private map: MLMap | null = null;
+	private marker: MLMarker | null = null;
 	private addressInput: HTMLInputElement | null = null;
 	private reverseGeocodeToken = 0;
 
@@ -535,6 +560,7 @@ class GeocodeModal extends Modal {
 				btn.addEventListener("click", () => {
 					this.selectedIcon = icon.name;
 					this.refreshIconSelection();
+					this.updateMarkerStyle();
 				});
 			}
 		}
@@ -555,6 +581,7 @@ class GeocodeModal extends Modal {
 			btn.addEventListener("click", () => {
 				this.selectedColor = color.name;
 				this.refreshColorSelection();
+				this.updateMarkerStyle();
 			});
 		}
 	}
@@ -611,33 +638,28 @@ class GeocodeModal extends Modal {
 		this.mapWrapper.removeClass("geocode-hidden");
 
 		if (!this.map) {
-			const markerIcon = L.divIcon({
-				className: "geocode-leaflet-marker",
-				iconSize: [28, 28],
-				iconAnchor: [14, 28],
-			});
-
-			this.map = L.map(this.mapEl, {
-				center: [coords.lat, coords.lon],
+			const map = new maplibregl.Map({
+				container: this.mapEl,
+				style: obsidianMapStyle(),
+				center: [coords.lon, coords.lat],
 				zoom: 14,
-				zoomControl: true,
-				attributionControl: true,
+				attributionControl: { compact: true },
 			});
+			this.map = map;
+			map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
-			L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-				subdomains: "abcd",
-				maxZoom: 19,
-				attribution: "© OpenStreetMap, © CARTO",
-			}).addTo(this.map);
-
-			this.marker = L.marker([coords.lat, coords.lon], {
+			const markerEl = buildMarkerEl(this.selectedIcon, this.selectedColor);
+			this.marker = new maplibregl.Marker({
+				element: markerEl,
+				anchor: "bottom",
 				draggable: true,
-				icon: markerIcon,
-			}).addTo(this.map);
+			})
+				.setLngLat([coords.lon, coords.lat])
+				.addTo(map);
 
 			this.marker.on("dragend", () => {
 				if (!this.marker) return;
-				const pos = this.marker.getLatLng();
+				const pos = this.marker.getLngLat();
 				this.latitude = pos.lat.toFixed(6);
 				this.longitude = pos.lng.toFixed(6);
 				if (this.coordDisplay) {
@@ -648,13 +670,24 @@ class GeocodeModal extends Modal {
 				void this.refreshAddressFromCoords();
 			});
 
-			// Leaflet needs a size recalculation once the container is visible
-			setTimeout(() => this.map?.invalidateSize(), 0);
+			// MapLibre needs a resize once the container is laid out
+			setTimeout(() => this.map?.resize(), 0);
 		} else {
-			this.map.setView([coords.lat, coords.lon], this.map.getZoom());
-			this.marker?.setLatLng([coords.lat, coords.lon]);
-			setTimeout(() => this.map?.invalidateSize(), 0);
+			this.map.setCenter([coords.lon, coords.lat]);
+			this.marker?.setLngLat([coords.lon, coords.lat]);
+			setTimeout(() => this.map?.resize(), 0);
 		}
+	}
+
+	private updateMarkerStyle(): void {
+		if (!this.marker) return;
+		const el = this.marker.getElement();
+		el.empty();
+		const rebuilt = buildMarkerEl(this.selectedIcon, this.selectedColor);
+		// Copy children from the rebuilt marker to preserve MapLibre's wrapper
+		el.className = rebuilt.className;
+		el.style.setProperty("--geocode-marker-color", rebuilt.style.getPropertyValue("--geocode-marker-color"));
+		Array.from(rebuilt.childNodes).forEach((n) => el.appendChild(n));
 	}
 
 	private updateSubmitState() {
@@ -1049,7 +1082,7 @@ function resolveMarkerHex(colorName: string): string {
 }
 
 class InlineMapRenderChild extends MarkdownRenderChild {
-	private map: L.Map | null = null;
+	private map: MLMap | null = null;
 	private readonly opts: InlineMapOptions;
 
 	constructor(containerEl: HTMLElement, opts: InlineMapOptions) {
@@ -1064,43 +1097,28 @@ class InlineMapRenderChild extends MarkdownRenderChild {
 		const mapEl = this.containerEl.createDiv({ cls: "geocode-inline-map" });
 		mapEl.style.height = `${this.opts.height}px`;
 
-		const hex = resolveMarkerHex(this.opts.color);
-		const markerEl = document.createElement("div");
-		markerEl.className = "geocode-inline-map-marker";
-		markerEl.style.setProperty("--geocode-marker-color", hex);
-		const iconEl = document.createElement("span");
-		iconEl.className = "geocode-inline-map-marker-icon";
-		setIcon(iconEl, this.opts.icon);
-		markerEl.appendChild(iconEl);
-
-		const markerIcon = L.divIcon({
-			className: "geocode-inline-map-marker-wrapper",
-			html: markerEl.outerHTML,
-			iconSize: [32, 38],
-			iconAnchor: [16, 38],
-		});
-
-		this.map = L.map(mapEl, {
-			center: [this.opts.lat, this.opts.lon],
+		const map = new maplibregl.Map({
+			container: mapEl,
+			style: obsidianMapStyle(),
+			center: [this.opts.lon, this.opts.lat],
 			zoom: 14,
-			zoomControl: true,
-			attributionControl: true,
-			scrollWheelZoom: false,
+			interactive: true,
+			scrollZoom: false,
+			attributionControl: { compact: true },
 		});
+		this.map = map;
+		map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
 
-		L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
-			subdomains: "abcd",
-			maxZoom: 19,
-			attribution: "© OpenStreetMap, © CARTO",
-		}).addTo(this.map);
+		const markerEl = buildMarkerEl(this.opts.icon, this.opts.color);
+		const marker = new maplibregl.Marker({ element: markerEl, anchor: "bottom" })
+			.setLngLat([this.opts.lon, this.opts.lat])
+			.addTo(map);
 
-		const marker = L.marker([this.opts.lat, this.opts.lon], { icon: markerIcon }).addTo(this.map);
 		if (this.opts.address) {
-			marker.bindPopup(this.opts.address);
+			marker.setPopup(new maplibregl.Popup({ offset: 24 }).setText(this.opts.address));
 		}
 
-		// Leaflet needs a size recalc once the container is attached
-		setTimeout(() => this.map?.invalidateSize(), 0);
+		setTimeout(() => this.map?.resize(), 0);
 	}
 
 	onunload(): void {
@@ -1363,6 +1381,11 @@ export default class GeocodeNotePlugin extends Plugin {
 			const reg = this.findMapBasesRegistration();
 			if (!reg || typeof reg.factory !== "function") return;
 
+			// Wipe any buttons left behind by a previous (buggy) session before we
+			// (re)install. Otherwise the idempotent guard in tryAttachControl would
+			// keep those stale duplicates in place.
+			document.querySelectorAll(".geocode-maps-locate").forEach((n) => n.remove());
+
 			const origFactory = reg.factory.bind(reg) as (
 				controller: unknown,
 				containerEl: HTMLElement
@@ -1399,15 +1422,24 @@ export default class GeocodeNotePlugin extends Plugin {
 				const map = (mv as { map?: DuckMapLibreMap }).map;
 				if (!map) return;
 				const ctrl = controls.get(map);
-				if (!ctrl) return;
-				try {
-					map.removeControl(ctrl);
-				} catch {
-					// ignore
+				if (ctrl) {
+					try {
+						map.removeControl(ctrl);
+					} catch {
+						// ignore
+					}
+					controls.delete(map);
 				}
-				controls.delete(map);
+				// Also scrub any untracked duplicates that accumulated from earlier buggy versions.
+				const container = (
+					map as { getContainer?: () => HTMLElement | undefined }
+				).getContainer?.();
+				container?.querySelectorAll(".geocode-maps-locate").forEach((n) => n.remove());
 			});
 		});
+
+		// Safety net: nuke any remaining .geocode-maps-locate anywhere in the workspace DOM.
+		document.querySelectorAll(".geocode-maps-locate").forEach((n) => n.remove());
 
 		this.obsidianMapsPatch = null;
 	}
@@ -1463,7 +1495,15 @@ export default class GeocodeNotePlugin extends Plugin {
 		const v = view as {
 			initializeMap?: (...args: unknown[]) => unknown;
 			map?: DuckMapLibreMap;
+			__geocodeHooked?: boolean;
 		};
+
+		// If this view was already hooked, only attempt to (re)attach to its current map
+		if (v.__geocodeHooked) {
+			this.tryAttachControl(v, controls);
+			return;
+		}
+
 		const origInit = v.initializeMap;
 		if (typeof origInit !== "function") return;
 
@@ -1472,6 +1512,7 @@ export default class GeocodeNotePlugin extends Plugin {
 			this.tryAttachControl(v, controls);
 			return result;
 		};
+		v.__geocodeHooked = true;
 
 		// Already-open view whose map is already built: attach immediately
 		this.tryAttachControl(v, controls);
@@ -1483,7 +1524,23 @@ export default class GeocodeNotePlugin extends Plugin {
 	) {
 		const map = view.map;
 		if (!map || typeof map.addControl !== "function") return;
-		if (controls.has(map)) return;
+
+		const container = (map as { getContainer?: () => HTMLElement | undefined }).getContainer?.();
+		if (!container) return;
+
+		// Bases uses MapLibre's native GeolocateControl. Don't stack ours on top.
+		if (container.querySelector(".maplibregl-ctrl-geolocate")) {
+			container.querySelectorAll(".geocode-maps-locate").forEach((n) => n.remove());
+			return;
+		}
+
+		// Idempotent guard: if this map's container already has our button, do
+		// nothing. When Bases destroys and recreates the map, the container and
+		// its children are gone too, giving us a clean slate for the next attach.
+		if (container.querySelector(".geocode-maps-locate")) {
+			return;
+		}
+
 		try {
 			const ctrl = new MapLibreLocateControl();
 			map.addControl(ctrl, "top-right");
