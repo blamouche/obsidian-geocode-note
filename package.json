@@ -1,6 +1,6 @@
 {
 	"name": "obsidian-geocode-note",
-	"version": "1.5.0",
+	"version": "1.5.1",
 	"description": "Add geographic coordinates to Obsidian notes",
 	"main": "main.js",
 	"scripts": {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.1
+
+### Docs
+
+- Rewrite the README to cover the `geocode-map` code block, the MapLibre GL + OpenFreeMap rendering, the theme-aware basemap switch, the live marker preview, and the refined behavior of the experimental Obsidian Maps locate button (now auto-skipped when Bases ships a native `GeolocateControl`).
+
 ## 1.5.0
 
 ### Features

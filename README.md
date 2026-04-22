@@ -14,14 +14,16 @@ Designed to work seamlessly with map plugins like [Obsidian Map View](https://gi
   - **Current location** — Uses device geolocation (GPS on mobile, IP-based fallback on desktop)
   - **Address search** — Powered by [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/) (free, no API key needed)
   - **Manual entry** — Type latitude and longitude directly
-  - **Draggable map marker** — Fine-tune the position on an interactive [Leaflet](https://leafletjs.com/) map (CartoCDN tiles); the address is refreshed via reverse geocoding
+  - **Draggable map marker** — Fine-tune the position on an interactive [MapLibre GL](https://maplibre.org/) map rendering [OpenFreeMap](https://openfreemap.org/) vector tiles (the same look & feel as Obsidian's built-in Bases maps, auto-switched between light and dark styles to match your theme); the address is refreshed via reverse geocoding as you drag
+- **Live marker preview** — The marker in the modal rebuilds instantly when you pick a different icon or color, without losing its position
+- **Inline map code block** — Drop a ` ```geocode-map ` block anywhere in a note and it renders as an interactive map centered on the frontmatter coordinates, with the same marker icon and color. Add `height: 320` inside the block to override the default size. Use the **"Insert map block"** command to drop the snippet at the cursor
 - **Resolved address saved to frontmatter** — Keeps the human-readable address alongside the coordinates
 - **Update mode** — Reopen a previously geocoded note and the modal reloads existing coordinates, icon, color and address for quick edits
 - **Prefill from note content** — Configure the plugin to prefill the address search from the note title or from the frontmatter `address` field
 - **Icon picker** — 42 icons from [Lucide](https://lucide.dev/) organized in 4 categories (Places, Nature, Transport, Activities)
 - **Color picker** — 10 color options for your map marker
 - **Bulk export** — Export every geocoded note from your vault to standard formats (GeoJSON, KML, GPX, CSV) in one click
-- **Obsidian Maps integration** (experimental) — Optionally inject a geolocation button into the map view of the official [Obsidian Maps](https://github.com/obsidianmd/obsidian-maps) plugin; clicking it recenters the map on your position and drops a marker dot
+- **Obsidian Maps locate button** (fallback) — On older Bases map views that do not yet ship MapLibre's native `GeolocateControl`, optionally inject a geolocation button of our own. Recent Bases versions already include a native control, in which case our injection is automatically skipped
 - **Mobile-friendly** — Responsive UI with large touch targets, works on both phone and desktop
 - **No API key required** — All services used are free and open
 
@@ -60,7 +62,7 @@ address: "Tour Eiffel, 5, Avenue Anatole France, Paris, France"
 1. **Current location** — Click "My current location". On mobile, the device GPS is used. On desktop, an approximate IP-based location is provided.
 2. **Address search** — Type an address in the search field and press Enter or click the search button. The first result from OpenStreetMap is used, and its full address is stored in the `address` frontmatter field.
 3. **Manual entry** — Click "Enter coordinates manually" to reveal latitude/longitude fields.
-4. **Fine-tune on the map** — Once coordinates are set, a Leaflet map appears. Drag the marker to adjust the position; the `address` field is refreshed automatically via reverse geocoding.
+4. **Fine-tune on the map** — Once coordinates are set, a MapLibre GL map appears with the OpenFreeMap `bright` or `dark` style depending on your Obsidian theme. Drag the marker to adjust the position; the `address` field is refreshed automatically via reverse geocoding.
 
 ### Choosing an icon
 
@@ -85,6 +87,27 @@ Click **"Save"** to write the coordinates, icon, color and address to the note's
 
 If the active note already contains geocoding data, opening the modal switches to **update mode**: the existing coordinates, icon, color and address are preloaded, the map is centered on the current position, and saving overwrites the frontmatter fields in place.
 
+### Embedding a map in a note
+
+Insert a fenced code block with the `geocode-map` language tag anywhere in a geocoded note:
+
+````markdown
+```geocode-map
+```
+````
+
+In reading mode the block is replaced by an interactive MapLibre map centered on the note's `coordinates`, with the marker icon and color from the frontmatter. Notes without coordinates show a placeholder inviting you to run **"Geocode current note"**.
+
+You can override the default height per block:
+
+````markdown
+```geocode-map
+height: 320
+```
+````
+
+The **"Insert map block"** command (palette `Ctrl/Cmd + P`) drops the snippet at the cursor.
+
 ## Settings
 
 Open **Settings → Community plugins → Geocode Note** to access two sections:
@@ -95,13 +118,19 @@ Open **Settings → Community plugins → Geocode Note** to access two sections:
 |--------|--------|-------------|
 | **Prefill search field** | `Nothing` (default), `Note title`, `Frontmatter "address" field` | When the modal opens, the address search input is prefilled with the selected source. In update mode the existing `address` is preferred; this fallback is used when it is missing. |
 
+### Map code block
+
+| Option | Values | Description |
+|--------|--------|-------------|
+| **Default map height** | `120`–`480` pixels (default `240`) | Height used by `geocode-map` blocks that don't set their own `height:`. |
+
 ### Experimental
 
 | Option | Description |
 |--------|-------------|
-| **Add locate button to Obsidian Maps** | When the official [Obsidian Maps](https://github.com/obsidianmd/obsidian-maps) plugin is installed and enabled, injects a geolocation button into each Bases map view. Clicking it centers the map on the user's current position (device GPS, with IP-based fallback) and draws a blue location marker. Re-clicking updates the marker. Disabling the option cleanly removes the button and marker from all open maps. |
+| **Add locate button to Obsidian Maps** | Safety net for older Bases versions that don't ship MapLibre's native `GeolocateControl`. When enabled, injects our own geolocation button into each Bases map view — clicking it centers the map on your position (device GPS, with IP-based fallback) and drops a blue location marker. If a native control is already present on the view, our injection is automatically skipped so you don't end up with two stacked buttons. Disabling the option cleanly removes our button and marker from all open maps. |
 
-> This option hooks into internals of the Obsidian Maps plugin that are not part of its public API and may break with future updates of that plugin. If the button does not appear, try closing and reopening the base tab after toggling the option.
+> This option hooks into internals of the Bases map view that are not part of its public API and may break with future updates. If the button does not appear, try closing and reopening the base tab after toggling the option.
 
 ### Export
 
