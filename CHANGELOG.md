@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.3
+
+### Fixes
+
+- **CSS lint compliance** — Removed all `!important` declarations from plugin styles (replaced with higher-specificity selectors), switched 3-digit hex colors to the full 6-digit form, and dropped a dead `.geocode-inline-map-marker-wrapper` rule left over from the Leaflet era.
+
 ## 1.5.2
 
 ### Fixes

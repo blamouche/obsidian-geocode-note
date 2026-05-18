@@ -202,8 +202,9 @@
 	box-shadow: 0 0 0 2px var(--interactive-accent-hover);
 }
 
-.geocode-hidden {
-	display: none !important;
+.geocode-manual-fields.geocode-hidden,
+.geocode-map-wrapper.geocode-hidden {
+	display: none;
 }
 
 /* Icon grid */
@@ -389,11 +390,6 @@
 	font-size: 0.9em;
 }
 
-.geocode-inline-map-marker-wrapper {
-	background: transparent !important;
-	border: none !important;
-}
-
 .geocode-inline-map-marker {
 	width: 32px;
 	height: 38px;
@@ -411,7 +407,7 @@
 	box-sizing: border-box;
 	border-radius: 50% 50% 50% 0;
 	background: var(--geocode-marker-color, #1971c2);
-	border: 2px solid #fff;
+	border: 2px solid #ffffff;
 	transform: rotate(-45deg);
 	transform-origin: center center;
 }
@@ -425,7 +421,7 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	color: #fff;
+	color: #ffffff;
 	z-index: 1;
 	pointer-events: none;
 }
@@ -440,8 +436,8 @@
 /* =============================================
    Obsidian Maps — injected locate control (experimental)
    ============================================= */
-.geocode-maps-locate-btn {
-	display: flex !important;
+.geocode-maps-locate .geocode-maps-locate-btn {
+	display: flex;
 	align-items: center;
 	justify-content: center;
 }
