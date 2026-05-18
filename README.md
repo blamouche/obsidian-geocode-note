@@ -147,18 +147,16 @@ Each exported entry carries the note's title, coordinates and resolved address; 
 
 ## Installation
 
-### From Obsidian Community Plugins (coming soon)
-
-1. Open **Settings** > **Community plugins** > **Browse**
-2. Search for **"Geocode Note"**
-3. Click **Install**, then **Enable**
-
 ### Manual installation
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/blamouche/obsidian-geocode-note/releases/latest)
 2. Create a folder: `<your-vault>/.obsidian/plugins/geocode-note/`
 3. Copy the three files into that folder
 4. Open Obsidian > **Settings** > **Community plugins** > Enable **"Geocode Note"**
+
+### With BRAT (Beta Reviewer's Auto-update Tool)
+
+If you use the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat), add this repository (`blamouche/obsidian-geocode-note`) as a beta plugin to get automatic updates on every release.
 
 ## Development
 
