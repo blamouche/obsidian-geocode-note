@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.5.2
+
+### Fixes
+
+- **Obsidian plugin review compliance** — Replaced raw DOM calls with Obsidian's popout-window-aware helpers (`createDiv`/`createSpan`/`createEl`, `activeDocument`, `activeWindow.setTimeout`) so the plugin behaves correctly in detached windows.
+- **`minAppVersion` bumped to `1.4.4`** — Reflects the actual minimum Obsidian version required by `FileManager.processFrontMatter` and `ToggleComponent.setDisabled`.
+
+### Build
+
+- Dropped the `builtin-modules` dependency in favor of Node's built-in `module.builtinModules`.
+- Release workflow now produces a signed GitHub artifact attestation for `main.js`, `manifest.json`, and `styles.css` (via `actions/attest-build-provenance@v2`).
+
 ## 1.5.1
 
 ### Docs

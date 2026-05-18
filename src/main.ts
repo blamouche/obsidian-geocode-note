@@ -19,7 +19,7 @@ const OPENFREEMAP_STYLE_BRIGHT = "https://tiles.openfreemap.org/styles/bright";
 const OPENFREEMAP_STYLE_DARK = "https://tiles.openfreemap.org/styles/dark";
 
 function isDarkTheme(): boolean {
-	return document.body.classList.contains("theme-dark");
+	return activeDocument.body.classList.contains("theme-dark");
 }
 
 function obsidianMapStyle(): string {
@@ -28,13 +28,10 @@ function obsidianMapStyle(): string {
 
 function buildMarkerEl(iconName: string, colorName: string): HTMLElement {
 	const hex = resolveMarkerHex(colorName);
-	const markerEl = document.createElement("div");
-	markerEl.className = "geocode-inline-map-marker";
+	const markerEl = createDiv({ cls: "geocode-inline-map-marker" });
 	markerEl.style.setProperty("--geocode-marker-color", hex);
-	const iconEl = document.createElement("span");
-	iconEl.className = "geocode-inline-map-marker-icon";
+	const iconEl = markerEl.createSpan({ cls: "geocode-inline-map-marker-icon" });
 	setIcon(iconEl, iconName);
-	markerEl.appendChild(iconEl);
 	return markerEl;
 }
 
@@ -548,7 +545,7 @@ class GeocodeModal extends Modal {
 
 		for (const category of MARKER_ICONS) {
 			const catDiv = this.iconGrid.createDiv({ cls: "geocode-icon-category" });
-			catDiv.createEl("span", { text: category.category, cls: "geocode-icon-category-label" });
+			catDiv.createSpan({ text: category.category, cls: "geocode-icon-category-label" });
 			const grid = catDiv.createDiv({ cls: "geocode-icon-grid" });
 
 			for (const icon of category.icons) {
@@ -671,11 +668,11 @@ class GeocodeModal extends Modal {
 			});
 
 			// MapLibre needs a resize once the container is laid out
-			setTimeout(() => this.map?.resize(), 0);
+			activeWindow.setTimeout(() => this.map?.resize(), 0);
 		} else {
 			this.map.setCenter([coords.lon, coords.lat]);
 			this.marker?.setLngLat([coords.lon, coords.lat]);
-			setTimeout(() => this.map?.resize(), 0);
+			activeWindow.setTimeout(() => this.map?.resize(), 0);
 		}
 	}
 
@@ -883,13 +880,12 @@ const EXPORT_FORMATS: {
 function downloadBlob(content: string, filename: string, mime: string) {
 	const blob = new Blob([content], { type: `${mime};charset=utf-8` });
 	const url = URL.createObjectURL(blob);
-	const link = document.createElement("a");
+	const link = activeDocument.body.createEl("a");
 	link.href = url;
 	link.download = filename;
-	document.body.appendChild(link);
 	link.click();
 	link.remove();
-	setTimeout(() => URL.revokeObjectURL(url), 0);
+	activeWindow.setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
 // --- MapLibre IControl (duck-typed) injected into obsidian-maps views ---
@@ -926,19 +922,22 @@ class MapLibreLocateControl {
 
 	onAdd(map: DuckMapLibreMap): HTMLElement {
 		this.map = map;
-		const container = document.createElement("div");
-		container.className = "maplibregl-ctrl maplibregl-ctrl-group geocode-maps-locate";
+		const container = createDiv({
+			cls: "maplibregl-ctrl maplibregl-ctrl-group geocode-maps-locate",
+		});
 
-		const button = document.createElement("button");
-		button.type = "button";
-		button.className = "geocode-maps-locate-btn";
-		button.setAttribute("aria-label", "Find my location");
-		button.title = "Find my location";
+		const button = container.createEl("button", {
+			cls: "geocode-maps-locate-btn",
+			attr: {
+				type: "button",
+				"aria-label": "Find my location",
+				title: "Find my location",
+			},
+		});
 		setIcon(button, "locate-fixed");
 
 		button.addEventListener("click", () => void this.handleClick());
 
-		container.appendChild(button);
 		this.container = container;
 		this.button = button;
 		return container;
@@ -1118,7 +1117,7 @@ class InlineMapRenderChild extends MarkdownRenderChild {
 			marker.setPopup(new maplibregl.Popup({ offset: 24 }).setText(this.opts.address));
 		}
 
-		setTimeout(() => this.map?.resize(), 0);
+		activeWindow.setTimeout(() => this.map?.resize(), 0);
 	}
 
 	onunload(): void {
@@ -1384,7 +1383,7 @@ export default class GeocodeNotePlugin extends Plugin {
 			// Wipe any buttons left behind by a previous (buggy) session before we
 			// (re)install. Otherwise the idempotent guard in tryAttachControl would
 			// keep those stale duplicates in place.
-			document.querySelectorAll(".geocode-maps-locate").forEach((n) => n.remove());
+			activeDocument.querySelectorAll(".geocode-maps-locate").forEach((n) => n.remove());
 
 			const origFactory = reg.factory.bind(reg) as (
 				controller: unknown,
@@ -1439,7 +1438,7 @@ export default class GeocodeNotePlugin extends Plugin {
 		});
 
 		// Safety net: nuke any remaining .geocode-maps-locate anywhere in the workspace DOM.
-		document.querySelectorAll(".geocode-maps-locate").forEach((n) => n.remove());
+		activeDocument.querySelectorAll(".geocode-maps-locate").forEach((n) => n.remove());
 
 		this.obsidianMapsPatch = null;
 	}
