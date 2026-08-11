@@ -121,12 +121,18 @@ interface GeocodeNoteSettings {
 	prefillSource: PrefillSource;
 	addLocateButtonToObsidianMaps: boolean;
 	inlineMapHeight: number;
+	pasteIcon: boolean;
+	pasteColor: boolean;
+	pasteAddress: boolean;
 }
 
 const DEFAULT_SETTINGS: GeocodeNoteSettings = {
 	prefillSource: "none",
 	addLocateButtonToObsidianMaps: false,
 	inlineMapHeight: 240,
+	pasteIcon: true,
+	pasteColor: true,
+	pasteAddress: true,
 };
 
 const MAP_CODE_BLOCK = "geocode-map";
@@ -1609,9 +1615,17 @@ export default class GeocodeNotePlugin extends Plugin {
 	) {
 		await this.app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
 			frontmatter["coordinates"] = [lat, lon];
-			frontmatter["icon"] = icon;
-			frontmatter["color"] = color;
-			if (address) {
+			if (this.settings.pasteIcon) {
+				frontmatter["icon"] = icon;
+			} else {
+				delete frontmatter["icon"];
+			}
+			if (this.settings.pasteColor) {
+				frontmatter["color"] = color;
+			} else {
+				delete frontmatter["color"];
+			}
+			if (this.settings.pasteAddress && address) {
 				frontmatter["address"] = address;
 			} else {
 				delete frontmatter["address"];
@@ -1632,6 +1646,38 @@ class GeocodeSettingTab extends PluginSettingTab {
 	display(): void {
 		const { containerEl } = this;
 		containerEl.empty();
+
+		new Setting(containerEl).setName("Pasted properties").setHeading();
+
+		new Setting(containerEl)
+			.setName("Paste marker icon")
+			.setDesc("Include the `icon` property in the note's frontmatter.")
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.pasteIcon).onChange(async (value) => {
+					this.plugin.settings.pasteIcon = value;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Paste marker color")
+			.setDesc("Include the `color` property in the note's frontmatter.")
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.pasteColor).onChange(async (value) => {
+					this.plugin.settings.pasteColor = value;
+					await this.plugin.saveSettings();
+				});
+			});
+
+		new Setting(containerEl)
+			.setName("Paste address")
+			.setDesc("Include the `address` property in the note's frontmatter.")
+			.addToggle((toggle) => {
+				toggle.setValue(this.plugin.settings.pasteAddress).onChange(async (value) => {
+					this.plugin.settings.pasteAddress = value;
+					await this.plugin.saveSettings();
+				});
+			});
 
 		new Setting(containerEl)
 			.setName("Prefill search field")
